@@ -35,7 +35,7 @@ export function passwordError(password: string): string | null {
 export function displayNameError(displayName: string): string | null {
   const name = displayName.trim();
   if (!name) return 'Enter a name.';
-  if (name.length > 50) return 'Use 50 characters or fewer.';
+  if (name.length > 40) return 'Use 40 characters or fewer.';
   return null;
 }
 

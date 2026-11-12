@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Suspense, type ReactNode } from 'react';
 import { SubmitButton } from '@/components/submit-button';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -22,17 +23,32 @@ export default function SignedInLayout({ children }: LayoutProps<'/'>) {
 
 const bar = 'mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2';
 
+// Styled like a quiet button: these sit beside the theme and sign-out buttons.
+const navLink =
+  'inline-flex min-h-11 items-center rounded-control px-3 font-medium text-ink no-underline transition-state hover:bg-sunken hover:underline';
+
 async function SignedInShell({ children }: { children: ReactNode }) {
   const viewer = await requireViewer();
+  // Only pages that exist: Settings holds People & invites for the owner; everyone else has Profile.
+  const settings =
+    viewer.role === 'owner' ? { href: '/settings', label: 'Settings' } : { href: '/settings/profile', label: 'Profile' };
   return (
     <>
       <header className="border-b border-line bg-surface">
         <div className={bar}>
           <div className="min-w-0 py-1">
-            <p className="font-semibold text-ink">My Expenses</p>
+            {/* 44px to tap, with the extra height taken from the margins so the header keeps its size. */}
+            <Link href="/" className="-my-2.5 flex min-h-11 w-fit items-center font-semibold text-ink no-underline hover:underline">
+              My Expenses
+            </Link>
             <p className="truncate text-sm text-muted">Signed in as {viewer.displayName}</p>
           </div>
           <div className="flex items-center gap-1">
+            <nav aria-label="Main">
+              <Link href={settings.href} className={navLink}>
+                {settings.label}
+              </Link>
+            </nav>
             <ThemeToggle />
             <form action={signOut}>
               <SubmitButton variant="quiet">Sign out</SubmitButton>

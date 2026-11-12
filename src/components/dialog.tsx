@@ -44,7 +44,8 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
       onClose={() => {
         if (!ref.current?.open) onClose();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-surface border border-line bg-surface p-5 text-ink shadow-overlay backdrop:bg-[rgb(0_0_0/0.45)]"
+      // Capped at the visible height, so a form in a dialog scrolls instead of running off a phone screen.
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-surface border border-line bg-surface p-5 text-ink shadow-overlay backdrop:bg-[rgb(0_0_0/0.45)]"
     >
       <div className="flex items-start justify-between gap-4">
         <h2 id={titleId} className="pt-2 text-lg font-semibold">

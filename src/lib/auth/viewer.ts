@@ -61,6 +61,11 @@ export async function requireViewer(): Promise<Viewer> {
 
 export async function requireOwner(): Promise<Viewer> {
   const viewer = await requireViewer();
-  if (viewer.role !== 'owner') throw new ForbiddenError();
+  assertOwner(viewer);
   return viewer;
+}
+
+/** For lib functions that only the owner may call; pages and actions use requireOwner. */
+export function assertOwner(viewer: Viewer): void {
+  if (viewer.role !== 'owner') throw new ForbiddenError();
 }
