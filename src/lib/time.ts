@@ -64,3 +64,39 @@ export function monthLabel(month: string): string {
   );
   return `${name} ${y}`;
 }
+
+/** The month `delta` months from `month` (a YYYY-MM string). */
+export function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split('-').map(Number);
+  const index = y * 12 + (m - 1) + delta;
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
+}
+
+/** "HH:mm" on the Malaysia clock, for a time input. */
+export function timeKey(d: Date): string {
+  const p = local(d);
+  return `${p.hour}:${p.minute}`;
+}
+
+const whenShort = new Intl.DateTimeFormat('en-GB', {
+  timeZone: TZ,
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+const whenLong = new Intl.DateTimeFormat('en-GB', {
+  timeZone: TZ,
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** "3 Nov, 12:00" in Malaysia time. */
+export const formatWhen = (d: Date) => whenShort.format(d);
+/** "3 November 2026, 12:00" in Malaysia time. */
+export const formatWhenLong = (d: Date) => whenLong.format(d);

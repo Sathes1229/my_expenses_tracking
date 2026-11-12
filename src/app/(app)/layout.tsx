@@ -45,6 +45,9 @@ async function SignedInShell({ children }: { children: ReactNode }) {
           </div>
           <div className="flex flex-wrap items-center gap-x-1">
             <nav aria-label="Main" className="flex items-center">
+              <Link href="/transactions" className={navLink}>
+                Transactions
+              </Link>
               <Link href="/budgets" className={navLink}>
                 Budgets
               </Link>
