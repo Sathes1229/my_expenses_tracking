@@ -2,12 +2,15 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
+import { Meter } from '@/components/meter';
 import { PageHeader } from '@/components/page-header';
+import { getAiBudgetStatus, usageByPersonToday } from '@/lib/ai/budget';
 import { MODELS, PRICE_SOURCES, PRICES_CHECKED_ON, PROVIDER_KEY_NAMES, PROVIDER_NAMES, type Provider } from '@/lib/ai/models';
 import { configuredProviders } from '@/lib/ai/providers';
 import { getAiSettings } from '@/lib/ai/settings';
 import { requireViewer } from '@/lib/auth/viewer';
-import { BudgetForm, ModelsForm } from './ai-forms';
+import { formatUsd } from '@/lib/money';
+import { BudgetForm, ModelsForm, ResetUsage } from './ai-forms';
 
 export const metadata: Metadata = { title: 'AI | My Expenses' };
 
@@ -53,7 +56,7 @@ async function AiSettings() {
   if (viewer.role !== 'owner') redirect('/settings/profile');
 
   const configured = configuredProviders();
-  const current = await getAiSettings();
+  const [current, today, byPerson] = await Promise.all([getAiSettings(), getAiBudgetStatus(), usageByPersonToday(viewer)]);
   const available = MODELS.filter((model) => configured.includes(model.provider));
   const toOption = ({ id, label }: { id: string; label: string }) => ({ id, label });
 
@@ -125,8 +128,53 @@ async function AiSettings() {
         <h2 id="limit-heading" className="text-lg font-semibold text-ink">
           Daily limit
         </h2>
-        <p className="mt-1 text-muted">The most AI use may cost in one day, counted in US dollars.</p>
+        <p className="mt-1 text-muted">
+          The most the assistant may cost in one day, for everyone together, in US dollars. Receipt reading does not
+          count toward it. The count starts again at midnight, Malaysia time.
+        </p>
+
+        <div className="mt-6 max-w-md">
+          <p className="text-ink">
+            <span className="text-2xl font-semibold tabular-nums">{formatUsd(today.usedMicroUsd)}</span>{' '}
+            <span className="text-muted">of {formatUsd(today.budgetMicroUsd)} used today</span>
+          </p>
+          {/* No label: the same amounts are written just above, so the meter is hidden from screen readers. */}
+          <div className="mt-2">
+            <Meter
+              value={Math.min(today.usedMicroUsd, today.budgetMicroUsd)}
+              max={today.budgetMicroUsd}
+              state={!today.available ? 'over' : today.usedMicroUsd * 100 >= today.budgetMicroUsd * 80 ? 'tight' : 'fine'}
+            />
+          </div>
+          {!today.available && (
+            <p className="mt-2 font-medium text-ink">
+              The assistant has stopped for everyone until midnight. Reset today&apos;s usage or raise the limit to turn
+              it back on.
+            </p>
+          )}
+          <p className="mt-2 text-sm text-muted">This is an estimate. Your provider&apos;s bill is the real figure.</p>
+        </div>
+
+        <h3 className="mt-6 font-semibold text-ink">Used today by person</h3>
+        {byPerson.length === 0 ? (
+          <p className="mt-1 text-muted">Nothing has counted toward today&apos;s limit yet.</p>
+        ) : (
+          <ul className="mt-2 max-w-md divide-y divide-line rounded-surface border border-line bg-surface">
+            {/* Two people may share a display name, so the position keeps the keys apart. */}
+            {byPerson.map((person, index) => (
+              <li key={`${index}-${person.name}`} className="flex items-baseline justify-between gap-4 px-4 py-2.5">
+                <span className="min-w-0 break-words text-ink">{person.name}</span>
+                <span className="tabular-nums whitespace-nowrap text-ink">{formatUsd(person.usedMicroUsd)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
         <div className="mt-4">
+          <ResetUsage canReset={today.usedMicroUsd > 0} />
+        </div>
+
+        <div className="mt-8">
           <BudgetForm dailyBudget={dollarsText(current.dailyBudgetMicroUsd)} />
         </div>
       </section>

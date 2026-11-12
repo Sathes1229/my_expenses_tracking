@@ -17,7 +17,8 @@ const MAX_BUDGET_MICRO_USD = 1_000_000_000; // 1000 USD
 // Digits with at most two decimals, an optional "$" or "US$" in front. No floats anywhere.
 const USD_AMOUNT = /^(?:us)?\$?\s*(\d+)(?:\.(\d{1,2}))?$/;
 
-function read(key: string): unknown {
+/** One stored setting, parsed; undefined when it was never written or is not valid JSON. */
+export function readSetting(key: string): unknown {
   const row = db.select({ value: settings.value }).from(settings).where(eq(settings.key, key)).get();
   if (!row) return undefined;
   try {
@@ -27,7 +28,7 @@ function read(key: string): unknown {
   }
 }
 
-function write(key: string, value: unknown) {
+export function writeSetting(key: string, value: unknown) {
   const json = JSON.stringify(value);
   db.insert(settings).values({ key, value: json }).onConflictDoUpdate({ target: settings.key, set: { value: json } }).run();
 }
@@ -45,10 +46,10 @@ export async function getAiSettings(): Promise<{
   receiptModel: string | null;
   dailyBudgetMicroUsd: number;
 }> {
-  const budget = read(BUDGET_KEY);
+  const budget = readSetting(BUDGET_KEY);
   return {
-    chatModel: usableModel(read(CHAT_KEY)),
-    receiptModel: usableModel(read(RECEIPT_KEY)),
+    chatModel: usableModel(readSetting(CHAT_KEY)),
+    receiptModel: usableModel(readSetting(RECEIPT_KEY)),
     dailyBudgetMicroUsd:
       typeof budget === 'number' && Number.isSafeInteger(budget) ? budget : DEFAULT_DAILY_BUDGET_MICRO_USD,
   };
@@ -66,13 +67,13 @@ function checkModel(modelId: string, field: string, needsVision: boolean) {
 export async function setChatModel(owner: Viewer, modelId: string): Promise<void> {
   assertOwner(owner);
   checkModel(modelId, 'chatModel', false);
-  write(CHAT_KEY, modelId);
+  writeSetting(CHAT_KEY, modelId);
 }
 
 export async function setReceiptModel(owner: Viewer, modelId: string): Promise<void> {
   assertOwner(owner);
   checkModel(modelId, 'receiptModel', true);
-  write(RECEIPT_KEY, modelId);
+  writeSetting(RECEIPT_KEY, modelId);
 }
 
 /** "2.50", "$2.5" or "US$2" in US dollars, from 0.01 to 1000. Stored as whole micro-USD. */
@@ -86,5 +87,5 @@ export async function setDailyBudget(owner: Viewer, usd: string): Promise<void> 
   const cents = Number((match[2] ?? '').padEnd(2, '0'));
   const micro = dollars * 1_000_000 + cents * 10_000;
   if (micro < MIN_BUDGET_MICRO_USD || micro > MAX_BUDGET_MICRO_USD) throw invalid;
-  write(BUDGET_KEY, micro);
+  writeSetting(BUDGET_KEY, micro);
 }

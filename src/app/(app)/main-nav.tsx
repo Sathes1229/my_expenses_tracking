@@ -26,9 +26,10 @@ const look = {
   },
   bottom: {
     nav: 'fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] lg:hidden',
-    list: 'flex',
+    // 13px labels so the owner's six items fit a 360px phone; narrower than that, the bar scrolls sideways.
+    list: 'flex overflow-x-auto',
     item: 'flex flex-auto',
-    link: 'relative flex min-h-14 flex-auto items-center justify-center px-1.5 text-sm font-medium whitespace-nowrap text-muted no-underline transition-state hover:bg-sunken hover:text-ink active:bg-sunken',
+    link: 'relative flex min-h-14 flex-auto items-center justify-center px-1 text-[0.8125rem] font-medium whitespace-nowrap text-muted no-underline transition-state hover:bg-sunken hover:text-ink active:bg-sunken',
     current: 'text-ink before:absolute before:inset-x-2 before:top-0 before:h-0.75 before:bg-ink',
   },
 } as const;

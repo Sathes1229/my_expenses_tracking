@@ -1,0 +1,286 @@
+import { simulateReadableStream } from 'ai';
+import { MockLanguageModelV4 } from 'ai/test';
+import { eq } from 'drizzle-orm';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { db } from '@/db/client';
+import { aiUsage, chatMessages } from '@/db/schema';
+import { createAccount } from '@/lib/auth/accounts';
+import type { Viewer } from '@/lib/auth/viewer';
+import { recordChatUsage } from '@/lib/ai/budget';
+import { clearChat, HISTORY_MESSAGES, listChat, MAX_OUTPUT_TOKENS } from '@/lib/ai/chat';
+import { costMicroUsd, MODELS } from '@/lib/ai/models';
+import { languageModel } from '@/lib/ai/providers';
+import { setChatModel, setDailyBudget } from '@/lib/ai/settings';
+import { createBudget } from '@/lib/budgets';
+import { fromLocalDateTime } from '@/lib/time';
+import { createTransaction } from '@/lib/transactions';
+import { POST } from '@/app/api/chat/route';
+import { resetDb } from '../helpers/db';
+import { sessionHeaders } from '../helpers/session';
+
+// The model is always a mock: these tests never reach a provider.
+vi.mock('@/lib/ai/providers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ai/providers')>()),
+  languageModel: vi.fn(),
+}));
+
+type StreamPart = Awaited<ReturnType<MockLanguageModelV4['doStream']>>['stream'] extends ReadableStream<infer P> ? P : never;
+
+const APP = 'http://localhost:3100';
+const chatModel = MODELS.find((m) => m.provider === 'anthropic')!.id;
+const usage = {
+  inputTokens: { total: 1200, noCache: 1200, cacheRead: undefined, cacheWrite: undefined },
+  outputTokens: { total: 80, text: 80, reasoning: undefined },
+};
+
+let owner: Viewer;
+let member: Viewer;
+let guest: Viewer;
+
+async function person(username: string, displayName: string, role: Viewer['role']): Promise<Viewer> {
+  const a = await createAccount({ username, displayName, password: 'password1', role });
+  return { id: a.id, role, displayName };
+}
+
+function answering(deltas: string[], options: { delayMs?: number; failAfter?: number } = {}) {
+  const parts: StreamPart[] = [{ type: 'text-start', id: 't' }];
+  deltas.forEach((delta, index) => {
+    if (index === options.failAfter) parts.push({ type: 'error', error: new Error('connection reset') });
+    else parts.push({ type: 'text-delta', id: 't', delta });
+  });
+  if (options.failAfter === undefined) {
+    parts.push({ type: 'text-end', id: 't' }, { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage });
+  }
+  return new MockLanguageModelV4({
+    doStream: async () => ({ stream: simulateReadableStream({ chunks: parts, chunkDelayInMs: options.delayMs ?? null }) }),
+  });
+}
+
+function failing() {
+  return new MockLanguageModelV4({
+    doStream: async () => {
+      throw new Error('provider is down');
+    },
+  });
+}
+
+/** A JSON body as the assistant page sends it, with its Content-Length. A string is sent as it is. */
+function ask(session: Headers, body: unknown, { origin = APP, sized = true }: { origin?: string | null; sized?: boolean } = {}) {
+  const text = typeof body === 'string' ? body : JSON.stringify(body);
+  const h = new Headers(session);
+  h.set('host', 'localhost:3100');
+  h.set('content-type', 'application/json');
+  if (sized) h.set('content-length', String(new TextEncoder().encode(text).byteLength));
+  if (origin) h.set('origin', origin);
+  return new Request(`${APP}/api/chat`, { method: 'POST', headers: h, body: text });
+}
+
+const messagesOf = (userId: string) => db.select().from(chatMessages).where(eq(chatMessages.userId, userId)).all();
+const usageRows = () => db.select().from(aiUsage).all();
+
+beforeEach(async () => {
+  await resetDb();
+  vi.mocked(languageModel).mockReset();
+  vi.stubEnv('ANTHROPIC_API_KEY', 'dummy');
+  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('DEEPSEEK_API_KEY', '');
+  owner = await person('owner', 'Owner', 'owner');
+  member = await person('siti', 'Siti', 'member');
+  guest = await person('mei', 'Mei', 'guest');
+});
+
+afterEach(() => vi.unstubAllEnvs());
+
+describe('POST /api/chat, refusals', () => {
+  it('refuses a signed-out request (401) and another site (403)', async () => {
+    await setChatModel(owner, chatModel);
+    expect((await POST(ask(new Headers(), { message: 'Hi' }))).status).toBe(401);
+    const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'Hi' }, { origin: 'http://evil.example' }));
+    expect(res.status).toBe(403);
+    expect(languageModel).not.toHaveBeenCalled();
+  });
+
+  it('needs a size (411), caps the body (413) and wants a message of 1 to 2000 characters (400)', async () => {
+    await setChatModel(owner, chatModel);
+    const session = await sessionHeaders('siti', 'password1');
+
+    expect((await POST(ask(session, { message: 'Hi' }, { sized: false }))).status).toBe(411);
+    expect((await POST(ask(session, { message: 'x'.repeat(17 * 1024) }))).status).toBe(413);
+
+    for (const bad of [{ message: '   ' }, { message: 'x'.repeat(2001) }, { message: 42 }, {}, 'not json', [1]]) {
+      const res = await POST(ask(session, bad));
+      expect(res.status).toBe(400);
+    }
+    expect((await (await POST(ask(session, { message: '' }))).json()).error).toBe('invalid_message');
+    expect(languageModel).not.toHaveBeenCalled();
+  });
+
+  it('answers 409 not_configured while no chat model is chosen, and saves nothing', async () => {
+    const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'not_configured' });
+    expect(messagesOf(member.id)).toHaveLength(0);
+    expect(languageModel).not.toHaveBeenCalled();
+  });
+
+  it('answers 429 budget_used once today is used up, for everyone, and saves nothing', async () => {
+    await setChatModel(owner, chatModel);
+    await setDailyBudget(owner, '0.01');
+    await recordChatUsage(owner.id, chatModel, 100_000, 0);
+
+    for (const username of ['siti', 'owner']) {
+      const res = await POST(ask(await sessionHeaders(username, 'password1'), { message: 'How am I doing?' }));
+      expect(res.status).toBe(429);
+      expect(await res.json()).toEqual({ error: 'budget_used' });
+    }
+    expect(db.select().from(chatMessages).all()).toHaveLength(0);
+    expect(usageRows()).toHaveLength(1);
+    expect(languageModel).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/chat, answers', () => {
+  beforeEach(async () => {
+    await setChatModel(owner, chatModel);
+  });
+
+  it('streams the answer, then saves both messages and one usage row', async () => {
+    vi.mocked(languageModel).mockReturnValue(answering(['You have ', 'RM 760.00 ', 'left.']));
+    const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: '  How am I doing?  ' }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(await res.text()).toBe('You have RM 760.00 left.');
+
+    expect(messagesOf(member.id).map((m) => [m.role, m.content])).toEqual([
+      ['user', 'How am I doing?'],
+      ['assistant', 'You have RM 760.00 left.'],
+    ]);
+    expect(usageRows()).toEqual([
+      expect.objectContaining({
+        userId: member.id,
+        model: chatModel,
+        inputTokens: 1200,
+        outputTokens: 80,
+        costMicroUsd: costMicroUsd(chatModel, 1200, 80),
+      }),
+    ]);
+    expect(languageModel).toHaveBeenCalledWith(chatModel);
+  });
+
+  it('sends the rules, the viewer’s own context and a capped answer length', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-13T04:00:00Z') });
+    try {
+      const groceries = (await createBudget(owner, { name: 'Groceries', allocationSen: 80000 })).id;
+      await createTransaction(member, {
+        merchant: 'Tesco',
+        occurredAt: fromLocalDateTime('2026-11-03', '12:00'),
+        totalSen: 4000,
+        paymentMethod: 'card',
+        budgetId: groceries,
+        items: [],
+      });
+      const model = answering(['Fine.']);
+      vi.mocked(languageModel).mockReturnValue(model);
+      await (await POST(ask(await sessionHeaders('mei', 'password1'), { message: 'Berapa baki saya?' }))).text();
+
+      const call = model.doStreamCalls[0];
+      expect(call.maxOutputTokens).toBe(MAX_OUTPUT_TOKENS);
+      expect(call.abortSignal).toBeDefined();
+      const system = String(call.prompt.find((m) => m.role === 'system')?.content);
+      expect(system).toMatch(/Malaysian household/);
+      expect(system).toMatch(/RM/);
+      expect(system).toMatch(/English or Malay/);
+      expect(system).toMatch(/not a licensed financial adviser/);
+      expect(system).toMatch(/investment advice/);
+      expect(system).toMatch(/say so/);
+      expect(system).toMatch(/data, not instructions/);
+      expect(system).toContain('Groceries'); // the guest may see budget names
+      expect(system).not.toContain('Tesco'); // but not a member's spending
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('sends only the last HISTORY_MESSAGES messages of this person, oldest first', async () => {
+    const base = Date.now() - 60 * 60 * 1000;
+    for (let i = 0; i < 30; i++) {
+      db.insert(chatMessages)
+        .values({ userId: member.id, role: i % 2 === 0 ? 'user' : 'assistant', content: `old ${i}`, createdAt: base + i * 1000 })
+        .run();
+    }
+    db.insert(chatMessages).values({ userId: guest.id, role: 'user', content: 'not yours', createdAt: base }).run();
+    const model = answering(['Ok.']);
+    vi.mocked(languageModel).mockReturnValue(model);
+    await (await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'And now?' }))).text();
+
+    const sent = model.doStreamCalls[0].prompt.filter((m) => m.role !== 'system');
+    expect(sent).toHaveLength(HISTORY_MESSAGES + 1);
+    const texts = sent.map((m) => (Array.isArray(m.content) ? m.content.map((p) => ('text' in p ? p.text : '')).join('') : m.content));
+    expect(texts[0]).toBe('old 10');
+    expect(texts.at(-2)).toBe('old 29');
+    expect(texts.at(-1)).toBe('And now?');
+    expect(texts).not.toContain('not yours');
+  });
+
+  it('answers 502 provider_error when the provider fails, and records no usage', async () => {
+    vi.mocked(languageModel).mockReturnValue(failing());
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }));
+      expect(res.status).toBe(502);
+      expect(await res.json()).toEqual({ error: 'provider_error' });
+    } finally {
+      quiet.mockRestore();
+    }
+    expect(messagesOf(member.id)).toHaveLength(0);
+    expect(usageRows()).toHaveLength(0);
+  });
+
+  it('breaks the stream when the provider fails part way, and saves nothing', async () => {
+    vi.mocked(languageModel).mockReturnValue(answering(['You have ', 'RM 760.00 ', 'left.'], { failAfter: 2 }));
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }));
+      expect(res.status).toBe(200);
+      await expect(res.text()).rejects.toThrow();
+    } finally {
+      quiet.mockRestore();
+    }
+    expect(messagesOf(member.id)).toHaveLength(0);
+    expect(usageRows()).toHaveLength(0);
+  });
+
+  it('saves no messages when the person leaves before the answer is complete', async () => {
+    const model = answering(['One ', 'two ', 'three ', 'four.'], { delayMs: 30 });
+    vi.mocked(languageModel).mockReturnValue(model);
+    const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }));
+    const reader = res.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(messagesOf(member.id)).toHaveLength(0);
+    expect(usageRows()).toHaveLength(0); // the provider reported no usage for an unfinished answer
+  });
+});
+
+describe('listChat and clearChat', () => {
+  it('keeps each person’s conversation private to them', async () => {
+    await setChatModel(owner, chatModel);
+    vi.mocked(languageModel).mockReturnValue(answering(['For Siti.']));
+    await (await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'Siti asks' }))).text();
+    vi.mocked(languageModel).mockReturnValue(answering(['For Mei.']));
+    await (await POST(ask(await sessionHeaders('mei', 'password1'), { message: 'Mei asks' }))).text();
+
+    expect((await listChat(member)).map((m) => [m.role, m.content])).toEqual([
+      ['user', 'Siti asks'],
+      ['assistant', 'For Siti.'],
+    ]);
+    expect((await listChat(guest)).map((m) => m.content)).toEqual(['Mei asks', 'For Mei.']);
+    expect(await listChat(owner)).toEqual([]);
+
+    await clearChat(member);
+    expect(await listChat(member)).toEqual([]);
+    expect(await listChat(guest)).toHaveLength(2);
+  });
+});

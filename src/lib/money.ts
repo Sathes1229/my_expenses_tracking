@@ -21,3 +21,13 @@ export function formatRM(sen: number): string {
   const cents = (abs % 100).toString().padStart(2, '0');
   return `${sen < 0 ? '-' : ''}RM ${ringgit}.${cents}`;
 }
+
+/**
+ * The AI budget's US dollars, from whole micro-USD, to the nearest cent: "US$1.02". An amount
+ * that rounds to nothing reads "under US$0.01", so usage never looks like zero.
+ */
+export function formatUsd(microUsd: number): string {
+  const cents = Math.round(microUsd / 10_000);
+  if (microUsd > 0 && cents === 0) return 'under US$0.01';
+  return `US$${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
+}

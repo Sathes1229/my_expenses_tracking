@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatRM, parseRM } from '@/lib/money';
+import { formatRM, formatUsd, parseRM } from '@/lib/money';
 
 describe('parseRM', () => {
   it('parses plain and decimal amounts into sen', () => {
@@ -25,5 +25,18 @@ describe('formatRM', () => {
   it('formats sen as ringgit', () => {
     expect(formatRM(123450)).toBe('RM 1,234.50');
     expect(formatRM(-500)).toBe('-RM 5.00');
+  });
+});
+
+describe('formatUsd', () => {
+  it('shows whole micro-USD as US dollars to the cent', () => {
+    expect(formatUsd(1_000_000)).toBe('US$1.00');
+    expect(formatUsd(1_020_000)).toBe('US$1.02');
+    expect(formatUsd(424_999)).toBe('US$0.42');
+    expect(formatUsd(0)).toBe('US$0.00');
+  });
+
+  it('never shows a small amount used as nothing', () => {
+    expect(formatUsd(400)).toBe('under US$0.01');
   });
 });

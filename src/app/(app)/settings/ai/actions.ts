@@ -1,6 +1,7 @@
 'use server';
 
 import { refresh } from 'next/cache';
+import { resetTodayUsage } from '@/lib/ai/budget';
 import { setChatModel, setDailyBudget, setReceiptModel } from '@/lib/ai/settings';
 import { requireOwner } from '@/lib/auth/viewer';
 import { ValidationError } from '@/lib/errors';
@@ -42,6 +43,14 @@ export async function saveBudgetAction(prev: FormState, formData: FormData): Pro
   } catch (error) {
     return failure(prev, error, { dailyBudget });
   }
+  refresh();
+  return nextFormState(prev, { done: true });
+}
+
+/** Today's assistant usage stops counting, so everyone can carry on until the limit is reached again. */
+export async function resetUsageAction(prev: FormState): Promise<FormState> {
+  const owner = await requireOwner();
+  await resetTodayUsage(owner);
   refresh();
   return nextFormState(prev, { done: true });
 }

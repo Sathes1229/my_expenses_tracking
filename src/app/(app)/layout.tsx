@@ -45,6 +45,7 @@ async function SignedInShell({ children }: { children: ReactNode }) {
     { href: '/transactions', label: 'Transactions' },
     { href: '/budgets', label: 'Budgets' },
     ...(viewer.role === 'owner' ? [{ href: '/debts', label: 'Debts' }] : []),
+    { href: '/assistant', label: 'Assistant' },
     viewer.role === 'owner' ? { href: '/settings', label: 'Settings' } : { href: '/settings/profile', label: 'Profile' },
   ];
   return (

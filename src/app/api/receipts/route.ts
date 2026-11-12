@@ -1,46 +1,13 @@
 import { extractReceipt } from '@/lib/ai/receipt';
 import { viewerFromHeaders } from '@/lib/auth/viewer';
 import { listBudgetNames } from '@/lib/budgets';
-import { env } from '@/lib/env';
 import { ValidationError } from '@/lib/errors';
+import { countBytes, declaredLength, fromThisApp, refuse } from '@/lib/request-guards';
 import { MAX_RECEIPT_BYTES, readReceiptImage, RECEIPT_TOO_LARGE, saveReceiptImage } from '@/lib/uploads';
 
 // Room for the multipart boundary and part headers around the photo.
 const MAX_BODY_BYTES = MAX_RECEIPT_BYTES + 64 * 1024;
 const NO_PHOTO = 'Choose a photo of the receipt.';
-
-const refuse = (status: number, error: string) => Response.json({ error }, { status });
-
-/**
- * Browsers send Origin with every POST a page makes. One naming another site is refused, on top of
- * the SameSite session cookie. "This app" is the host the request was sent to (as Next's own server
- * action check reads it) or APP_URL.
- */
-function fromThisApp(request: Request): boolean {
-  const origin = request.headers.get('origin');
-  if (origin === null) return true;
-  if (!URL.canParse(origin)) return false; // includes "null", sent from sandboxed and opaque pages
-  if (env.APP_URL && URL.canParse(env.APP_URL) && new URL(env.APP_URL).origin === origin) return true;
-  const host = request.headers.get('x-forwarded-host')?.split(',')[0].trim() || request.headers.get('host');
-  return new URL(origin).host === host;
-}
-
-/**
- * The body as it arrives, failing as soon as it passes `limit` bytes. Content-Length is only what
- * the client claims, and route handlers have no body cap of their own: without this an endless body
- * would be buffered until the server ran out of memory. The failure also cancels the upload.
- */
-function countBytes(body: ReadableStream<Uint8Array>, limit: number) {
-  let seen = 0;
-  const counter = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      seen += chunk.byteLength;
-      if (seen > limit) controller.error(new Error('The upload is larger than it said.'));
-      else controller.enqueue(chunk);
-    },
-  });
-  return { body: body.pipeThrough(counter), overLimit: () => seen > limit };
-}
 
 /**
  * Takes one receipt photo (multipart field `image`), stores it shrunk and stripped, and reads it
@@ -52,15 +19,15 @@ export async function POST(request: Request): Promise<Response> {
   const viewer = await viewerFromHeaders(request.headers);
   if (!viewer) return refuse(401, 'You are signed out. Sign in again, then scan the receipt.');
 
-  const declared = request.headers.get('content-length');
-  if (declared === null || !/^\d+$/.test(declared)) {
+  const declared = declaredLength(request);
+  if (declared === null) {
     return refuse(411, 'The upload did not say how big it is, so it was not accepted. Try again from the scan page.');
   }
   // Turned away before the body is read when the request says up front that it is too big.
-  if (Number(declared) > MAX_BODY_BYTES) return refuse(413, RECEIPT_TOO_LARGE);
+  if (declared > MAX_BODY_BYTES) return refuse(413, RECEIPT_TOO_LARGE);
   if (!request.body) return refuse(400, NO_PHOTO);
 
-  const counted = countBytes(request.body, Number(declared));
+  const counted = countBytes(request.body, declared);
   let image: FormDataEntryValue | null;
   try {
     const multipart = new Response(counted.body, { headers: { 'content-type': request.headers.get('content-type') ?? '' } });
