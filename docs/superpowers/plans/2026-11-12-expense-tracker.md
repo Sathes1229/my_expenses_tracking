@@ -19,7 +19,7 @@
 - **Visibility is enforced in `src/lib/`**, on the server, for every query. Hiding something in the UI is never the only protection.
 - **Timezone:** `Asia/Kuala_Lumpur` for "today", "this month" and receipt dates. Months are calendar months.
 - **Currency:** RM for expenses, stored as integer sen. AI budget in USD, stored as integer micro-USD.
-- **Server binds to `0.0.0.0`** in dev and production. Default port 3000.
+- **Server binds to `0.0.0.0`** in dev and production. Default port 3100 (port 3000 is taken by a Grafana container on the owner's PC).
 - **UI rules:** before any UI work load the `antislop` skill plus `antislop-ui`, `antislop-layoutmobile`, `antislop-copywriting`, `antislop-human` (mode: `during`, from global preference). Direction: calm and plain like a banking app, must not look AI-generated; dials ENERGY 1 / RHYTHM 2 / MOTION 1. No em dash in any UI text. Mobile-first; tap targets at least 44px; WCAG AA contrast in light and dark; every data view has empty, loading and error states; every control works and is keyboard reachable.
 - **UI text is English.** App name is the plain text "My Expenses". No generated logo.
 - **Do not change Windows firewall or other system settings.** Document the command for the owner instead.
@@ -97,7 +97,7 @@ export class ValidationError extends Error { constructor(public field: string, m
 - `parseRM(text: string): number | null`, `formatRM(sen: number): string`
 - `TZ = 'Asia/Kuala_Lumpur'`, `monthKey(d: Date): string` ("2026-11"), `dayKey(d: Date): string` ("2026-11-12"), `monthRange(month: string): { start: Date; end: Date }` (end exclusive), `fromLocalDateTime(date: string, time: string): Date`, `monthLabel(month: string): string` ("November 2026")
 - `db` (Drizzle instance), `runMigrations(): void`, test helper `resetDb(): Promise<void>` (empties every table)
-- npm scripts: `dev` (`next dev -H 0.0.0.0`), `build`, `start` (`next start -H 0.0.0.0`), `test` (`vitest run`), `db:generate`, `db:migrate`
+- npm scripts: `dev` (`next dev -H 0.0.0.0 -p 3100`), `build`, `start` (`next start -H 0.0.0.0 -p 3100`), `test` (`vitest run`), `db:generate`, `db:migrate`
 
 **Schema (all app tables, created now so later tasks only add logic).** IDs are text UUIDs; timestamps are integer ms.
 - `invites`: id, tokenHash (unique), role, createdBy, createdAt, expiresAt, usedAt, usedBy, revokedAt
@@ -145,7 +145,7 @@ expect(fromLocalDateTime('2026-11-01', '00:30').toISOString()).toBe('2026-10-31T
 - [ ] **Step 4:** Implement `env.ts`, `errors.ts`, `money.ts` (string and integer arithmetic only, no floats), `time.ts` (`Intl.DateTimeFormat` with `TZ`), schema, client, migrate. Vitest setup points `DATABASE_PATH` at a temp file per worker and runs migrations once.
 - [ ] **Step 5:** Run `npm test`. Expected: PASS.
 - [ ] **Step 6:** Write `.env.example` with every variable above, empty, each with a one-line comment. Confirm `.gitignore` already excludes `.env*`, `/data/`.
-- [ ] **Step 7:** Run `npm run dev`, open `http://localhost:3000`. Expected: a plain page with the text "My Expenses", no console errors.
+- [ ] **Step 7:** Run `npm run dev`, open `http://localhost:3100`. Expected: a plain page with the text "My Expenses", no console errors.
 - [ ] **Step 8:** Commit and push: `chore: scaffold app, database schema, money and time helpers`.
 
 ---
@@ -661,9 +661,9 @@ expect(await buildAssistantContext(owner)).toMatch(/Ali/);
 - Modify: `next.config.*` (`output: 'standalone'`)
 
 - [ ] **Step 1:** `instrumentation.ts` runs `runMigrations()` and creates `UPLOADS_DIR` at server start, so a fresh install or an updated one needs no manual database step.
-- [ ] **Step 2:** Dockerfile: multi-stage, Node LTS base that exists for both `linux/amd64` and `linux/arm64`, runs as a non-root user, `HOSTNAME=0.0.0.0`, data at `/data`. `compose.yaml`: one service, port 3000, a named volume at `/data`, `env_file: .env`, `DATABASE_PATH=/data/app.db`, `UPLOADS_DIR=/data/uploads`, `restart: unless-stopped`. `.dockerignore` excludes `.env*`, `data/`, `node_modules`, `.next`, `.git`.
-- [ ] **Step 3:** Run `docker compose build` then `docker compose up -d`, open `http://localhost:3000`. Expected: the setup page; after creating an owner and restarting the container, the data is still there. Then `docker compose down`.
-- [ ] **Step 4:** Write `README.md` for the owner, in plain language: how to start and stop it on this PC; the address family use on home Wi-Fi and how to find the PC's IP; the one PowerShell command (run as Administrator, by the owner) that lets other devices reach port 3000; how to put AI keys in `.env` and restart; how to reset a forgotten owner password with `OWNER_RESET_TOKEN`; how to back up (copy the `data` folder).
+- [ ] **Step 2:** Dockerfile: multi-stage, Node LTS base that exists for both `linux/amd64` and `linux/arm64`, runs as a non-root user, `HOSTNAME=0.0.0.0`, data at `/data`. `compose.yaml`: one service, port 3100, a named volume at `/data`, `env_file: .env`, `DATABASE_PATH=/data/app.db`, `UPLOADS_DIR=/data/uploads`, `restart: unless-stopped`. `.dockerignore` excludes `.env*`, `data/`, `node_modules`, `.next`, `.git`.
+- [ ] **Step 3:** Run `docker compose build` then `docker compose up -d`, open `http://localhost:3100`. Expected: the setup page; after creating an owner and restarting the container, the data is still there. Then `docker compose down`.
+- [ ] **Step 4:** Write `README.md` for the owner, in plain language: how to start and stop it on this PC; the address family use on home Wi-Fi and how to find the PC's IP; the one PowerShell command (run as Administrator, by the owner) that lets other devices reach port 3100; how to put AI keys in `.env` and restart; how to reset a forgotten owner password with `OWNER_RESET_TOKEN`; how to back up (copy the `data` folder).
 - [ ] **Step 5:** Write `docs/deploy.md`: copy the repo and `.env` to the server, set `APP_URL` to the domain, `docker compose up -d`, and a short Caddy example for HTTPS when the server has no reverse proxy.
 - [ ] **Step 6:** Commit and push: `chore: Docker setup, README and deployment notes`.
 
