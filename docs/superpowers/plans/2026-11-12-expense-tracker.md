@@ -34,6 +34,19 @@ Inputs the spec implies but does not spell out, most likely to bite first. Each 
 4. **Month edges and moved transactions:** a purchase at 00:30 on the 1st (Malaysia time) counts in the new month; editing a transaction's date or budget updates both the old and new budget and month. (Tasks 1, 6, 7)
 5. **Access that changes while someone is logged in:** a removed person, or a member changed to guest, loses access on their next request; an invite link that is expired, used, or opened by two people at once. (Task 4)
 
+## Phases (owner's request)
+
+The tasks are built one at a time, grouped into four phases. **Work stops at the end of each phase.** The owner opens the app, tries what that phase added, and says to continue before the next phase starts. Each task is still committed and pushed as it finishes.
+
+| Phase | Tasks | What the owner can try at the end |
+|---|---|---|
+| **1. Foundation and login** | 1 to 4 | Open the app on this PC, create the owner account, see the look in light and dark, invite one person as Member and one as Guest, sign in as each, reset a password, remove a person. |
+| **2. Money tracking** | 5 to 9 | Set budgets with thresholds, add expenses by hand, get a warning when a budget passes its threshold, record debts and part payments, and see it all on the dashboard as owner, member and guest. |
+| **3. AI features** | 10 to 12 | Choose the AI provider, scan a real receipt and correct it before saving, chat with the assistant, set the daily assistant budget and reset it. Needs at least one Anthropic or OpenAI key in `.env`. |
+| **4. Ready for the server** | 13 to 14 | Run it in Docker, read the README, use it from a phone on home Wi-Fi, and read the final check report. |
+
+At each phase end, report to the owner: what was built, what to click to try it, anything not verified, and what the next phase adds.
+
 ---
 
 ## File Structure
