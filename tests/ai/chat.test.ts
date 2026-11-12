@@ -6,8 +6,8 @@ import { db } from '@/db/client';
 import { aiUsage, chatMessages } from '@/db/schema';
 import { createAccount } from '@/lib/auth/accounts';
 import type { Viewer } from '@/lib/auth/viewer';
-import { recordChatUsage } from '@/lib/ai/budget';
-import { clearChat, HISTORY_MESSAGES, listChat, MAX_OUTPUT_TOKENS } from '@/lib/ai/chat';
+import { getAiBudgetStatus, recordChatUsage } from '@/lib/ai/budget';
+import { ANSWER_TIMEOUT_MS, clearChat, HISTORY_MESSAGES, listChat, MAX_OUTPUT_TOKENS } from '@/lib/ai/chat';
 import { costMicroUsd, MODELS } from '@/lib/ai/models';
 import { languageModel } from '@/lib/ai/providers';
 import { setChatModel, setDailyBudget } from '@/lib/ai/settings';
@@ -73,6 +73,19 @@ function ask(session: Headers, body: unknown, { origin = APP, sized = true }: { 
   if (sized) h.set('content-length', String(new TextEncoder().encode(text).byteLength));
   if (origin) h.set('origin', origin);
   return new Request(`${APP}/api/chat`, { method: 'POST', headers: h, body: text });
+}
+
+/**
+ * What an unfinished answer is counted as when the provider reports nothing: every character sent
+ * (rules, context, history, question) at three to a token, and the longest answer allowed.
+ */
+function estimateFor(model: MockLanguageModelV4) {
+  const chars = model.doStreamCalls[0].prompt.reduce(
+    (sum, m) =>
+      sum + (typeof m.content === 'string' ? m.content.length : m.content.reduce((n, p) => n + ('text' in p ? p.text.length : 0), 0)),
+    0,
+  );
+  return { inputTokens: Math.ceil(chars / 3), outputTokens: MAX_OUTPUT_TOKENS };
 }
 
 const messagesOf = (userId: string) => db.select().from(chatMessages).where(eq(chatMessages.userId, userId)).all();
@@ -237,30 +250,77 @@ describe('POST /api/chat, answers', () => {
     expect(usageRows()).toHaveLength(0);
   });
 
-  it('breaks the stream when the provider fails part way, and saves nothing', async () => {
-    vi.mocked(languageModel).mockReturnValue(answering(['You have ', 'RM 760.00 ', 'left.'], { failAfter: 2 }));
+  it('breaks the stream when the provider fails part way, saves no messages, and counts an estimate', async () => {
+    const model = answering(['You have ', 'RM 760.00 ', 'left.'], { failAfter: 2 });
+    vi.mocked(languageModel).mockReturnValue(model);
     const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }));
       expect(res.status).toBe(200);
       await expect(res.text()).rejects.toThrow();
+      await vi.waitFor(() => expect(usageRows()).toHaveLength(1));
     } finally {
       quiet.mockRestore();
     }
     expect(messagesOf(member.id)).toHaveLength(0);
-    expect(usageRows()).toHaveLength(0);
+    expect(usageRows()).toEqual([expect.objectContaining({ userId: member.id, model: chatModel, ...estimateFor(model) })]);
   });
 
-  it('saves no messages when the person leaves before the answer is complete', async () => {
+  it('counts an estimate, and saves no messages, when the person leaves before the answer is complete', async () => {
     const model = answering(['One ', 'two ', 'three ', 'four.'], { delayMs: 30 });
     vi.mocked(languageModel).mockReturnValue(model);
     const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }));
     const reader = res.body!.getReader();
     await reader.read();
     await reader.cancel();
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await vi.waitFor(() => expect(usageRows()).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 200)); // the rest of the answer would have arrived by now
     expect(messagesOf(member.id)).toHaveLength(0);
-    expect(usageRows()).toHaveLength(0); // the provider reported no usage for an unfinished answer
+    const [row] = usageRows();
+    expect(row).toMatchObject({ userId: member.id, model: chatModel, ...estimateFor(model) });
+    expect(row.costMicroUsd).toBe(costMicroUsd(chatModel, row.inputTokens, row.outputTokens));
+    expect(row.costMicroUsd).toBeGreaterThan(0);
+    expect(usageRows()).toHaveLength(1);
+  });
+
+  it('counts an estimate, and saves no messages, when the answer times out part way', async () => {
+    const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+    const shortened = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation((ms) => realTimeout(ms === ANSWER_TIMEOUT_MS ? 100 : ms));
+    try {
+      const model = answering(['One ', 'two ', 'three ', 'four.'], { delayMs: 40 });
+      vi.mocked(languageModel).mockReturnValue(model);
+      const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }));
+      expect(res.status).toBe(200);
+      await expect(res.text()).rejects.toThrow();
+      await vi.waitFor(() => expect(usageRows()).toHaveLength(1));
+      expect(messagesOf(member.id)).toHaveLength(0);
+      expect(usageRows()).toEqual([expect.objectContaining({ userId: member.id, ...estimateFor(model) })]);
+    } finally {
+      shortened.mockRestore();
+    }
+  });
+
+  it('stops the assistant once abandoned answers have used up the budget', async () => {
+    // 800 output tokens at US$10 per million are US$0.008, so the second abandoned answer passes US$0.01.
+    const sonnet = MODELS.find((m) => m.id === 'claude-sonnet-5-5')!.id;
+    await setChatModel(owner, sonnet);
+    await setDailyBudget(owner, '0.01');
+    const session = await sessionHeaders('siti', 'password1');
+    for (let i = 1; i <= 2; i++) {
+      vi.mocked(languageModel).mockReturnValue(answering(['One ', 'two ', 'three.'], { delayMs: 30 }));
+      const res = await POST(ask(session, { message: 'How am I doing?' }));
+      expect(res.status).toBe(200);
+      const reader = res.body!.getReader();
+      await reader.read();
+      await reader.cancel();
+      await vi.waitFor(() => expect(usageRows()).toHaveLength(i));
+    }
+    expect((await getAiBudgetStatus()).available).toBe(false);
+    const refused = await POST(ask(session, { message: 'And now?' }));
+    expect(refused.status).toBe(429);
+    expect(messagesOf(member.id)).toHaveLength(0);
   });
 });
 

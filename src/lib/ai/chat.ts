@@ -13,8 +13,8 @@ export const MAX_OUTPUT_TOKENS = 800;
 /** Earlier messages sent along with a question: the last ten exchanges. */
 export const HISTORY_MESSAGES = 20;
 export const MESSAGE_MAX_CHARS = 2000;
-// A provider that stops sending is given up on, so the request and the answer box do not hang.
-const TIMEOUT_MS = 120_000;
+/** A provider that stops sending is given up on, so the request and the answer box do not hang. */
+export const ANSWER_TIMEOUT_MS = 120_000;
 
 export type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string; createdAt: Date };
 export type ChatRefusal = 'not_configured' | 'budget_used' | 'provider_error';
@@ -66,7 +66,7 @@ function systemPrompt(context: string): string {
 }
 
 /** The last HISTORY_MESSAGES messages, oldest first, starting with a question as providers expect. */
-function recentHistory(viewer: Viewer): ModelMessage[] {
+function recentHistory(viewer: Viewer): { role: 'user' | 'assistant'; content: string }[] {
   const rows = db
     .select({ role: chatMessages.role, content: chatMessages.content })
     .from(chatMessages)
@@ -87,9 +87,9 @@ const describe = (error: unknown) => (error instanceof Error ? `${error.name}: $
 /**
  * Asks the owner's chat model with this person's own context and history, resolving once the first
  * words arrive (or the call fails) so the route can still answer with an error status.
- * Only a complete answer is saved: the reported usage, then the question and answer together. A
- * failure saves nothing and breaks the stream; leaving part way stops the call and records only
- * usage the provider already reported.
+ * Only a complete answer is saved: the reported usage, then the question and answer together.
+ * An answer that stops after words were sent (the person left, a timeout, a provider failure)
+ * saves no messages but still counts against the budget, since the provider bills it.
  */
 export async function answerChat(viewer: Viewer, question: string, signal?: AbortSignal): Promise<ChatAnswer> {
   const { chatModel } = await getAiSettings();
@@ -97,14 +97,20 @@ export async function answerChat(viewer: Viewer, question: string, signal?: Abor
   if (!(await getAiBudgetStatus()).available) return { ok: false, reason: 'budget_used' };
 
   const askedAt = Date.now();
-  const context = await buildAssistantContext(viewer);
+  const instructions = systemPrompt(await buildAssistantContext(viewer));
+  const messages: ModelMessage[] = [...recentHistory(viewer), { role: 'user', content: question }];
+  // Counted for an unfinished answer the provider reported nothing for: about three characters per
+  // input token, and the longest answer allowed, so stopping early never costs the budget less.
+  const sentChars = instructions.length + messages.reduce((sum, m) => sum + String(m.content).length, 0);
+  const estimate = { input: Math.ceil(sentChars / 3), output: MAX_OUTPUT_TOKENS };
+
   const stop = new AbortController();
   const result = streamText({
     model: languageModel(chatModel),
-    instructions: systemPrompt(context),
-    messages: [...recentHistory(viewer), { role: 'user', content: question }],
+    instructions,
+    messages,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
-    abortSignal: AbortSignal.any([stop.signal, AbortSignal.timeout(TIMEOUT_MS), ...(signal ? [signal] : [])]),
+    abortSignal: AbortSignal.any([stop.signal, AbortSignal.timeout(ANSWER_TIMEOUT_MS), ...(signal ? [signal] : [])]),
     onError: ({ error }) => console.error('The assistant could not answer:', describe(error)),
   });
 
@@ -128,39 +134,54 @@ export async function answerChat(viewer: Viewer, question: string, signal?: Abor
 
   void (async () => {
     let answer = '';
+    let sent = false;
+    let recorded = false;
     const reported = { input: 0, output: 0 };
+    const record = async (used: { input: number; output: number }) => {
+      recorded = true;
+      await recordChatUsage(viewer.id, chatModel, used.input, used.output);
+    };
+    // Once words were sent the provider has billed for them: count what it reported, else the estimate.
+    // A failure before any words (the 502 answer) counts nothing.
+    const recordUnfinished = async () => {
+      if (!sent || recorded) return;
+      await record(reported.input + reported.output > 0 ? reported : estimate);
+    };
     try {
       for await (const part of result.stream) {
         if (part.type === 'text-delta') {
           answer += part.text;
+          sent = true;
           if (!left) out.enqueue(encoder.encode(part.text));
           started.resolve(true);
         } else if (part.type === 'finish-step') {
           reported.input += tokens(part.usage).input;
           reported.output += tokens(part.usage).output;
         } else if (part.type === 'finish') {
-          const used = tokens(part.totalUsage);
+          if (part.finishReason === 'error') {
+            await recordUnfinished();
+            return fail();
+          }
           // Billed even when the answer came back empty, so the budget still counts it.
-          if (part.finishReason !== 'error') await recordChatUsage(viewer.id, chatModel, used.input, used.output);
-          if (part.finishReason === 'error' || !answer.trim()) return fail();
+          await record(tokens(part.totalUsage));
+          if (!answer.trim()) return fail();
           db.transaction((tx) => {
             tx.insert(chatMessages).values({ userId: viewer.id, role: 'user', content: question, createdAt: askedAt }).run();
             tx.insert(chatMessages).values({ userId: viewer.id, role: 'assistant', content: answer, createdAt: Date.now() }).run();
           });
           if (!left) out.close();
           return;
-        } else if (part.type === 'error') {
-          return fail(); // already logged by onError
-        } else if (part.type === 'abort') {
-          if (reported.input + reported.output > 0) {
-            await recordChatUsage(viewer.id, chatModel, reported.input, reported.output);
-          }
+        } else if (part.type === 'error' || part.type === 'abort') {
+          // An error is already logged by onError; an abort is the person leaving or the timeout.
+          await recordUnfinished();
           return fail();
         }
       }
+      await recordUnfinished();
       fail();
     } catch (error) {
       console.error('The assistant answer was not saved:', describe(error));
+      await recordUnfinished().catch((cause) => console.error('Its usage was not recorded:', describe(cause)));
       fail();
     }
   })();
