@@ -8,6 +8,13 @@
       "when": 1794469955021,
       "tag": "0000_sticky_sphinx",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794472916319,
+      "tag": "0001_high_slapstick",
+      "breakpoints": true
     }
   ]
 }

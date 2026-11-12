@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import { themeScript } from "@/components/theme-script";
+import { ThemeSync } from "@/components/theme-sync";
 import "./globals.css";
 
 // Variable font: one file covers every weight used (400 to 600).
@@ -22,7 +23,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="flex min-h-full flex-col bg-canvas text-ink">{children}</body>
+      <body className="flex min-h-full flex-col bg-canvas text-ink">
+        <ThemeSync />
+        {children}
+      </body>
     </html>
   );
 }

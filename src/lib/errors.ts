@@ -26,3 +26,22 @@ export class AppError extends Error {
     this.status = STATUS[code];
   }
 }
+
+/** The viewer is signed in but their role does not allow this. */
+export class ForbiddenError extends AppError {
+  constructor(message = 'You are not allowed to do that.') {
+    super('forbidden', message);
+    this.name = 'ForbiddenError';
+  }
+}
+
+/** Input that cannot be saved. `field` names the form field the message belongs under. */
+export class ValidationError extends AppError {
+  readonly field: string;
+
+  constructor(field: string, message: string) {
+    super('bad_request', message);
+    this.name = 'ValidationError';
+    this.field = field;
+  }
+}

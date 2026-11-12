@@ -9,6 +9,7 @@ const expectedTables = [
   'invites', 'login_attempts', 'budgets', 'budget_allocations', 'transactions',
   'transaction_items', 'receipt_uploads', 'notifications', 'notification_reads',
   'debts', 'debt_payments', 'chat_messages', 'ai_usage', 'settings',
+  'user', 'session', 'account', 'verification',
 ];
 
 describe('database', () => {

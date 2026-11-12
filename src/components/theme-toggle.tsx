@@ -1,8 +1,7 @@
 'use client';
 
-import { useLayoutEffect } from 'react';
 import { Button } from './button';
-import { readStoredTheme, THEME_KEY, type Theme } from './theme-script';
+import { THEME_KEY, type Theme } from './theme-script';
 
 /**
  * Switches between light and dark and remembers the choice on this device. Until someone
@@ -10,13 +9,6 @@ import { readStoredTheme, THEME_KEY, type Theme } from './theme-script';
  * CSS picks it from the theme in effect, so the server and the browser render the same markup.
  */
 export function ThemeToggle() {
-  // The head script already applied a stored choice before paint. In development React's
-  // Strict Mode remount clears that attribute from <html>, so put it back. No-op in production.
-  useLayoutEffect(() => {
-    const stored = readStoredTheme();
-    if (stored) document.documentElement.dataset.theme = stored;
-  }, []);
-
   function toggle() {
     const root = document.documentElement;
     const current: Theme =

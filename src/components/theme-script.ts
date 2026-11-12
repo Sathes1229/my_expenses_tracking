@@ -1,4 +1,4 @@
-// Shared by the root layout (server) and ThemeToggle (client), so it must stay a plain
+// Shared by the root layout (server) and ThemeToggle and ThemeSync (client), so it must stay a plain
 // module: a value exported from a 'use client' file reaches the server only as a reference.
 
 export type Theme = 'light' | 'dark';
