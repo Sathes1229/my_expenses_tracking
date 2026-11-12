@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Field } from '@/components/field';
 import { BellIcon, CameraIcon, CloseIcon, MenuIcon, PlusIcon } from '@/components/icons';
 import { Meter } from '@/components/meter';
+import { budgetState } from '@/lib/budget-state';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
 import { Select } from '@/components/select';
@@ -174,7 +175,7 @@ export default function StyleguidePage() {
                   <StateTag state={state} />
                 </div>
                 <div className="mt-2">
-                  <Meter value={spent} max={allocation} threshold={80} label={`${name} budget used`} />
+                  <Meter value={spent} max={allocation} state={state} threshold={80} label={`${name} budget used`} />
                 </div>
                 <p className="mt-1.5 text-sm text-muted">
                   {left >= 0 ? (
@@ -195,19 +196,19 @@ export default function StyleguidePage() {
           <div>
             <dt className="text-sm text-muted">Exactly at the threshold</dt>
             <dd className="mt-2">
-              <Meter value={80} max={100} threshold={80} label="At the threshold" />
+              <Meter value={80} max={100} state={budgetState(80, 100, 80)} threshold={80} label="At the threshold" />
             </dd>
           </div>
           <div>
             <dt className="text-sm text-muted">No threshold</dt>
             <dd className="mt-2">
-              <Meter value={25} max={100} label="No threshold" />
+              <Meter value={25} max={100} state={budgetState(25, 100, 80)} label="No threshold" />
             </dd>
           </div>
           <div>
             <dt className="text-sm text-muted">Nothing allocated</dt>
             <dd className="mt-2">
-              <Meter value={1000} max={0} label="Nothing allocated" />
+              <Meter value={1000} max={0} state={budgetState(1000, 0, 80)} label="Nothing allocated" />
             </dd>
           </div>
         </dl>

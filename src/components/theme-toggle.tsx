@@ -27,7 +27,7 @@ export function ThemeToggle() {
   }
 
   return (
-    <Button variant="quiet" onClick={toggle}>
+    <Button variant="quiet" onClick={toggle} className="whitespace-nowrap">
       <span className="dark:hidden">Dark theme</span>
       <span className="hidden dark:inline">Light theme</span>
     </Button>

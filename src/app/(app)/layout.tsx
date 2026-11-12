@@ -25,7 +25,7 @@ const bar = 'mx-auto flex w-full max-w-5xl flex-wrap items-center justify-betwee
 
 // Styled like a quiet button: these sit beside the theme and sign-out buttons.
 const navLink =
-  'inline-flex min-h-11 items-center rounded-control px-3 font-medium text-ink no-underline transition-state hover:bg-sunken hover:underline';
+  'inline-flex min-h-11 items-center rounded-control px-3 font-medium whitespace-nowrap text-ink no-underline transition-state hover:bg-sunken hover:underline';
 
 async function SignedInShell({ children }: { children: ReactNode }) {
   const viewer = await requireViewer();
@@ -43,15 +43,18 @@ async function SignedInShell({ children }: { children: ReactNode }) {
             </Link>
             <p className="truncate text-sm text-muted">Signed in as {viewer.displayName}</p>
           </div>
-          <div className="flex items-center gap-1">
-            <nav aria-label="Main">
+          <div className="flex flex-wrap items-center gap-x-1">
+            <nav aria-label="Main" className="flex items-center">
+              <Link href="/budgets" className={navLink}>
+                Budgets
+              </Link>
               <Link href={settings.href} className={navLink}>
                 {settings.label}
               </Link>
             </nav>
             <ThemeToggle />
             <form action={signOut}>
-              <SubmitButton variant="quiet">Sign out</SubmitButton>
+              <SubmitButton variant="quiet" className="whitespace-nowrap">Sign out</SubmitButton>
             </form>
           </div>
         </div>

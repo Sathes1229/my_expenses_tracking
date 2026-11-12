@@ -50,6 +50,13 @@ export function monthRange(month: string): { start: Date; end: Date } {
   };
 }
 
+const MONTH_PARAM = /^(?!0000)\d{4}-(?:0[1-9]|1[0-2])$/;
+
+/** A month from a query string or form, checked as YYYY-MM. Anything else gives the current month. */
+export function parseMonthParam(value: string | undefined): string {
+  return value !== undefined && MONTH_PARAM.test(value) ? value : monthKey(new Date());
+}
+
 export function monthLabel(month: string): string {
   const [y, m] = month.split('-').map(Number);
   const name = new Intl.DateTimeFormat('en-GB', { month: 'long', timeZone: 'UTC' }).format(

@@ -1,9 +1,12 @@
+import type { BudgetState } from '@/lib/budget-state';
 import { cx } from './cx';
 import { meterParts } from './meter-parts';
 
 type MeterProps = {
   value: number;
   max: number;
+  /** From budgetState(), the same value the StateTag shows, so colour and word always agree. */
+  state: BudgetState;
   /** Threshold as a percentage of max (a budget's alert level). Draws the tick. */
   threshold?: number;
   /**
@@ -17,11 +20,10 @@ type MeterProps = {
 /**
  * The app's one identity motif: a thin bar with a tick at the threshold. Used for budgets,
  * the dashboard and the AI budget, nowhere else. The fill is ink until the threshold,
- * amber from the threshold, red past max (same rule as the budget state).
+ * amber when the state is tight, red when over (the colour comes from the state, never recomputed here).
  */
-export function Meter({ value, max, threshold, label }: MeterProps) {
-  const { fillPct, thresholdPct, over } = meterParts(value, max, threshold);
-  const tight = !over && thresholdPct !== null && value * 100 >= max * thresholdPct;
+export function Meter({ value, max, state, threshold, label }: MeterProps) {
+  const { fillPct, thresholdPct } = meterParts(value, max, threshold);
   const usedPct = max > 0 ? Math.round((value / max) * 100) : 0;
 
   const a11y = label
@@ -41,7 +43,7 @@ export function Meter({ value, max, threshold, label }: MeterProps) {
         <div
           className={cx(
             'h-full transition-state',
-            over ? 'bg-danger' : tight ? 'bg-warning' : 'bg-meter-fill',
+            state === 'over' ? 'bg-danger' : state === 'tight' ? 'bg-warning' : 'bg-meter-fill',
           )}
           style={{ width: `${fillPct}%` }}
         />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dayKey, fromLocalDateTime, monthKey, monthLabel, monthRange } from '@/lib/time';
+import { dayKey, fromLocalDateTime, monthKey, monthLabel, monthRange, parseMonthParam } from '@/lib/time';
 
 // 2026-10-31T16:30:00Z is 00:30 on 1 Nov in Malaysia
 const lateOct = new Date('2026-10-31T16:30:00Z');
@@ -25,5 +25,13 @@ describe('time helpers (Asia/Kuala_Lumpur)', () => {
 
   it('labels a month', () => {
     expect(monthLabel('2026-11')).toBe('November 2026');
+  });
+
+  it('accepts a YYYY-MM month parameter and falls back to the current month otherwise', () => {
+    const now = monthKey(new Date());
+    expect(parseMonthParam('2026-03')).toBe('2026-03');
+    for (const bad of [undefined, '', '2026-13', '2026-00', '2026-3', '26-03', '2026-03-01', ' 2026-03', 'abc', '0000-05']) {
+      expect(parseMonthParam(bad)).toBe(now);
+    }
   });
 });
