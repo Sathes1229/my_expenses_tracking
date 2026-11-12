@@ -133,13 +133,53 @@ describe('readReceiptImage', () => {
 
 const APP = 'http://localhost:3100';
 
-function upload(headers: Headers, bytes: Buffer, type: string, origin: string | null = APP, host = 'localhost:3100'): Request {
-  const body = new FormData();
-  body.append('image', new File([new Uint8Array(bytes)], 'receipt', { type }));
-  const h = new Headers(headers);
+function headersFor(session: Headers, origin: string | null, host: string): Headers {
+  const h = new Headers(session);
   h.set('host', host);
   if (origin) h.set('origin', origin);
+  return h;
+}
+
+/** A multipart upload as a browser sends it: the body serialised, with its Content-Length. */
+async function upload(
+  session: Headers,
+  bytes: Buffer,
+  type: string,
+  origin: string | null = APP,
+  host = 'localhost:3100',
+): Promise<Request> {
+  const form = new FormData();
+  form.append('image', new File([new Uint8Array(bytes)], 'receipt', { type }));
+  const encoded = new Response(form);
+  const body = new Uint8Array(await encoded.arrayBuffer());
+  const h = headersFor(session, origin, host);
+  h.set('content-type', encoded.headers.get('content-type')!);
+  h.set('content-length', String(body.byteLength));
   return new Request(`http://${host}/api/receipts`, { method: 'POST', headers: h, body });
+}
+
+/** A body that never ends, counting what was read from it. */
+function endless() {
+  const seen = { bytes: 0, cancelled: false };
+  const chunk = new Uint8Array(64 * 1024);
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      seen.bytes += chunk.byteLength;
+      controller.enqueue(chunk);
+    },
+    cancel() {
+      seen.cancelled = true;
+    },
+    // No read-ahead: a chunk is only made when someone reads, so `seen` counts what was read.
+  }, { highWaterMark: 0 });
+  return { stream, seen };
+}
+
+function streamed(session: Headers, body: ReadableStream<Uint8Array>, contentLength?: number): Request {
+  const h = headersFor(session, APP, 'localhost:3100');
+  h.set('content-type', 'multipart/form-data; boundary=x');
+  if (contentLength !== undefined) h.set('content-length', String(contentLength));
+  return new Request(`${APP}/api/receipts`, { method: 'POST', headers: h, body, duplex: 'half' } as RequestInit);
 }
 
 function image(headers: Headers, id: string) {
@@ -149,38 +189,58 @@ function image(headers: Headers, id: string) {
 describe('POST /api/receipts', () => {
   it('refuses another site (403) and a signed-out request (401)', async () => {
     const ownerHeaders = await sessionHeaders('owner', 'password1');
-    expect((await POST(upload(ownerHeaders, pngWithAlpha, 'image/png', 'http://evil.example'))).status).toBe(403);
-    expect((await POST(upload(ownerHeaders, pngWithAlpha, 'image/png', 'null'))).status).toBe(403);
-    expect((await POST(upload(new Headers(), pngWithAlpha, 'image/png'))).status).toBe(401);
+    expect((await POST(await upload(ownerHeaders, pngWithAlpha, 'image/png', 'http://evil.example'))).status).toBe(403);
+    expect((await POST(await upload(ownerHeaders, pngWithAlpha, 'image/png', 'null'))).status).toBe(403);
+    expect((await POST(await upload(new Headers(), pngWithAlpha, 'image/png'))).status).toBe(401);
   });
 
   it('accepts the address the page was opened on, and a request with no Origin', async () => {
     const lan = 'http://192.168.10.86:3100';
     const ownerHeaders = await sessionHeaders('owner', 'password1');
-    expect((await POST(upload(ownerHeaders, pngWithAlpha, 'image/png', lan, '192.168.10.86:3100'))).status).toBe(200);
-    expect((await POST(upload(ownerHeaders, pngWithAlpha, 'image/png', lan, 'localhost:3100'))).status).toBe(403);
-    expect((await POST(upload(ownerHeaders, pngWithAlpha, 'image/png', null))).status).toBe(200);
+    expect((await POST(await upload(ownerHeaders, pngWithAlpha, 'image/png', lan, '192.168.10.86:3100'))).status).toBe(200);
+    expect((await POST(await upload(ownerHeaders, pngWithAlpha, 'image/png', lan, 'localhost:3100'))).status).toBe(403);
+    expect((await POST(await upload(ownerHeaders, pngWithAlpha, 'image/png', null))).status).toBe(200);
   });
 
-  it('answers 400 with a plain message for a bad file', async () => {
+  it('answers 400 with a plain message for a bad file, and 413 for one over 15 MB', async () => {
     const headers = await sessionHeaders('owner', 'password1');
-    const heic = await POST(upload(headers, heicFixture, 'image/heic'));
+    const heic = await POST(await upload(headers, heicFixture, 'image/heic'));
     expect(heic.status).toBe(400);
     expect((await heic.json()).error).toMatch(/Most compatible/i);
 
-    const big = await POST(upload(headers, Buffer.alloc(16 * 1024 * 1024), 'image/jpeg'));
-    expect(big.status).toBe(400);
+    const big = await POST(await upload(headers, Buffer.alloc(16 * 1024 * 1024), 'image/jpeg'));
+    expect(big.status).toBe(413);
     expect((await big.json()).error).toMatch(/15 MB/);
+  });
 
-    const declared = upload(headers, pngWithAlpha, 'image/png');
-    const lying = new Request(declared, { headers: new Headers([...declared.headers, ['content-length', String(20 * 1024 * 1024)]]) });
-    const refused = await POST(lying);
-    expect(refused.status).toBe(400);
-    expect((await refused.json()).error).toMatch(/15 MB/); // turned away on the declared size, before reading
+  it('refuses a body with no size (411), and one declared over the limit before reading it (413)', async () => {
+    const headers = await sessionHeaders('owner', 'password1');
+    const unsized = endless();
+    const noLength = await POST(streamed(headers, unsized.stream));
+    expect(noLength.status).toBe(411);
+    expect(unsized.seen.bytes).toBe(0);
+
+    const huge = endless();
+    const declaredHuge = await POST(streamed(headers, huge.stream, 20 * 1024 * 1024));
+    expect(declaredHuge.status).toBe(413);
+    expect((await declaredHuge.json()).error).toMatch(/15 MB/);
+    expect(huge.seen.bytes).toBe(0);
+
+    const nonsense = endless();
+    expect((await POST(streamed(headers, nonsense.stream, Number.NaN))).status).toBe(411);
+  });
+
+  it('stops reading a body that runs past the size it declared (413), without buffering it all', async () => {
+    const lying = endless();
+    const res = await POST(streamed(await sessionHeaders('owner', 'password1'), lying.stream, 1000));
+    expect(res.status).toBe(413);
+    expect((await res.json()).error).toMatch(/15 MB/);
+    expect(lying.seen.bytes).toBeLessThan(1024 * 1024); // an endless body: only a few chunks were read
+    expect(lying.seen.cancelled).toBe(true);
   });
 
   it('stores the photo and returns no draft while no receipt model is set', async () => {
-    const res = await POST(upload(await sessionHeaders('siti', 'password1'), pngWithAlpha, 'image/png'));
+    const res = await POST(await upload(await sessionHeaders('siti', 'password1'), pngWithAlpha, 'image/png'));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual({ uploadId: expect.any(String), draft: null, reason: 'not_configured' });

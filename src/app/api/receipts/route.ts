@@ -26,6 +26,23 @@ function fromThisApp(request: Request): boolean {
 }
 
 /**
+ * The body as it arrives, failing as soon as it passes `limit` bytes. Content-Length is only what
+ * the client claims, and route handlers have no body cap of their own: without this an endless body
+ * would be buffered until the server ran out of memory. The failure also cancels the upload.
+ */
+function countBytes(body: ReadableStream<Uint8Array>, limit: number) {
+  let seen = 0;
+  const counter = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      seen += chunk.byteLength;
+      if (seen > limit) controller.error(new Error('The upload is larger than it said.'));
+      else controller.enqueue(chunk);
+    },
+  });
+  return { body: body.pipeThrough(counter), overLimit: () => seen > limit };
+}
+
+/**
  * Takes one receipt photo (multipart field `image`), stores it shrunk and stripped, and reads it
  * with the receipt model. Nothing becomes a transaction here: the scan page shows the draft in the
  * form, and only its Save creates one (and links this upload).
@@ -35,16 +52,24 @@ export async function POST(request: Request): Promise<Response> {
   const viewer = await viewerFromHeaders(request.headers);
   if (!viewer) return refuse(401, 'You are signed out. Sign in again, then scan the receipt.');
 
-  // Turned away before the body is read when the browser says up front that it is too big.
-  if (Number(request.headers.get('content-length')) > MAX_BODY_BYTES) return refuse(400, RECEIPT_TOO_LARGE);
+  const declared = request.headers.get('content-length');
+  if (declared === null || !/^\d+$/.test(declared)) {
+    return refuse(411, 'The upload did not say how big it is, so it was not accepted. Try again from the scan page.');
+  }
+  // Turned away before the body is read when the request says up front that it is too big.
+  if (Number(declared) > MAX_BODY_BYTES) return refuse(413, RECEIPT_TOO_LARGE);
+  if (!request.body) return refuse(400, NO_PHOTO);
+
+  const counted = countBytes(request.body, Number(declared));
   let image: FormDataEntryValue | null;
   try {
-    image = (await request.formData()).get('image');
+    const multipart = new Response(counted.body, { headers: { 'content-type': request.headers.get('content-type') ?? '' } });
+    image = (await multipart.formData()).get('image');
   } catch {
-    return refuse(400, NO_PHOTO);
+    return counted.overLimit() ? refuse(413, RECEIPT_TOO_LARGE) : refuse(400, NO_PHOTO);
   }
   if (!(image instanceof File)) return refuse(400, NO_PHOTO);
-  if (image.size > MAX_RECEIPT_BYTES) return refuse(400, RECEIPT_TOO_LARGE);
+  if (image.size > MAX_RECEIPT_BYTES) return refuse(413, RECEIPT_TOO_LARGE);
 
   let uploadId: string;
   try {
