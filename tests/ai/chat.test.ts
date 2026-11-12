@@ -42,7 +42,7 @@ async function person(username: string, displayName: string, role: Viewer['role'
   return { id: a.id, role, displayName };
 }
 
-function answering(deltas: string[], options: { delayMs?: number; failAfter?: number } = {}) {
+function answering(deltas: string[], options: { delayMs?: number; firstDelayMs?: number; failAfter?: number } = {}) {
   const parts: StreamPart[] = [{ type: 'text-start', id: 't' }];
   deltas.forEach((delta, index) => {
     if (index === options.failAfter) parts.push({ type: 'error', error: new Error('connection reset') });
@@ -52,7 +52,13 @@ function answering(deltas: string[], options: { delayMs?: number; failAfter?: nu
     parts.push({ type: 'text-end', id: 't' }, { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage });
   }
   return new MockLanguageModelV4({
-    doStream: async () => ({ stream: simulateReadableStream({ chunks: parts, chunkDelayInMs: options.delayMs ?? null }) }),
+    doStream: async () => ({
+      stream: simulateReadableStream({
+        chunks: parts,
+        initialDelayInMs: options.firstDelayMs ?? null,
+        chunkDelayInMs: options.delayMs ?? null,
+      }),
+    }),
   });
 }
 
@@ -65,14 +71,24 @@ function failing() {
 }
 
 /** A JSON body as the assistant page sends it, with its Content-Length. A string is sent as it is. */
-function ask(session: Headers, body: unknown, { origin = APP, sized = true }: { origin?: string | null; sized?: boolean } = {}) {
+function ask(
+  session: Headers,
+  body: unknown,
+  { origin = APP, sized = true, signal }: { origin?: string | null; sized?: boolean; signal?: AbortSignal } = {},
+) {
   const text = typeof body === 'string' ? body : JSON.stringify(body);
   const h = new Headers(session);
   h.set('host', 'localhost:3100');
   h.set('content-type', 'application/json');
   if (sized) h.set('content-length', String(new TextEncoder().encode(text).byteLength));
   if (origin) h.set('origin', origin);
-  return new Request(`${APP}/api/chat`, { method: 'POST', headers: h, body: text });
+  return new Request(`${APP}/api/chat`, { method: 'POST', headers: h, body: text, signal });
+}
+
+/** Makes the route's 120 s answer timeout fire after `ms` instead, for the duration of a test. */
+function shortenAnswerTimeout(ms: number) {
+  const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+  return vi.spyOn(AbortSignal, 'timeout').mockImplementation((asked) => realTimeout(asked === ANSWER_TIMEOUT_MS ? ms : asked));
 }
 
 /**
@@ -283,11 +299,37 @@ describe('POST /api/chat, answers', () => {
     expect(usageRows()).toHaveLength(1);
   });
 
+  it('counts an estimate, and saves no messages, when the person leaves before the first word', async () => {
+    const model = answering(['One ', 'two.'], { firstDelayMs: 300 });
+    vi.mocked(languageModel).mockReturnValue(model);
+    const leaving = new AbortController();
+    const asking = POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }, { signal: leaving.signal }));
+    await vi.waitFor(() => expect(model.doStreamCalls).toHaveLength(1)); // the provider has the question
+    leaving.abort();
+    const res = await asking;
+    expect(res.status).toBe(502); // nobody is left to read it
+    await vi.waitFor(() => expect(usageRows()).toHaveLength(1));
+    expect(usageRows()).toEqual([expect.objectContaining({ userId: member.id, model: chatModel, ...estimateFor(model) })]);
+    expect(messagesOf(member.id)).toHaveLength(0);
+  });
+
+  it('counts an estimate, and saves no messages, when the answer times out before the first word', async () => {
+    const shortened = shortenAnswerTimeout(100);
+    try {
+      const model = answering(['One ', 'two.'], { firstDelayMs: 400 });
+      vi.mocked(languageModel).mockReturnValue(model);
+      const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }));
+      expect(res.status).toBe(502);
+      await vi.waitFor(() => expect(usageRows()).toHaveLength(1));
+      expect(usageRows()).toEqual([expect.objectContaining({ userId: member.id, model: chatModel, ...estimateFor(model) })]);
+      expect(messagesOf(member.id)).toHaveLength(0);
+    } finally {
+      shortened.mockRestore();
+    }
+  });
+
   it('counts an estimate, and saves no messages, when the answer times out part way', async () => {
-    const realTimeout = AbortSignal.timeout.bind(AbortSignal);
-    const shortened = vi
-      .spyOn(AbortSignal, 'timeout')
-      .mockImplementation((ms) => realTimeout(ms === ANSWER_TIMEOUT_MS ? 100 : ms));
+    const shortened = shortenAnswerTimeout(100);
     try {
       const model = answering(['One ', 'two ', 'three ', 'four.'], { delayMs: 40 });
       vi.mocked(languageModel).mockReturnValue(model);

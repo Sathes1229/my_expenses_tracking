@@ -88,7 +88,7 @@ const describe = (error: unknown) => (error instanceof Error ? `${error.name}: $
  * Asks the owner's chat model with this person's own context and history, resolving once the first
  * words arrive (or the call fails) so the route can still answer with an error status.
  * Only a complete answer is saved: the reported usage, then the question and answer together.
- * An answer that stops after words were sent (the person left, a timeout, a provider failure)
+ * An answer the person leaves, that times out, or that the provider breaks after words were sent
  * saves no messages but still counts against the budget, since the provider bills it.
  */
 export async function answerChat(viewer: Viewer, question: string, signal?: AbortSignal): Promise<ChatAnswer> {
@@ -105,12 +105,15 @@ export async function answerChat(viewer: Viewer, question: string, signal?: Abor
   const estimate = { input: Math.ceil(sentChars / 3), output: MAX_OUTPUT_TOKENS };
 
   const stop = new AbortController();
+  const stopSignals = [stop.signal, AbortSignal.timeout(ANSWER_TIMEOUT_MS), ...(signal ? [signal] : [])];
+  // The person left or the timeout fired, as opposed to the provider failing on its own.
+  const stoppedByUs = () => stopSignals.some((s) => s.aborted);
   const result = streamText({
     model: languageModel(chatModel),
     instructions,
     messages,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
-    abortSignal: AbortSignal.any([stop.signal, AbortSignal.timeout(ANSWER_TIMEOUT_MS), ...(signal ? [signal] : [])]),
+    abortSignal: AbortSignal.any(stopSignals),
     onError: ({ error }) => console.error('The assistant could not answer:', describe(error)),
   });
 
@@ -141,10 +144,11 @@ export async function answerChat(viewer: Viewer, question: string, signal?: Abor
       recorded = true;
       await recordChatUsage(viewer.id, chatModel, used.input, used.output);
     };
-    // Once words were sent the provider has billed for them: count what it reported, else the estimate.
-    // A failure before any words (the 502 answer) counts nothing.
+    // Once words were sent, or the call was stopped by the person leaving or the timeout, the provider
+    // has billed for it: count what it reported, else the estimate. A provider failure before any
+    // words (the 502 answer) counts nothing.
     const recordUnfinished = async () => {
-      if (!sent || recorded) return;
+      if (recorded || !(sent || stoppedByUs())) return;
       await record(reported.input + reported.output > 0 ? reported : estimate);
     };
     try {
