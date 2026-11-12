@@ -1,17 +1,191 @@
 @import "tailwindcss";
 
+/*
+  Design tokens. The reason for each value is in docs/design-decisions.md, with the
+  contrast ratio of every text and control pair in both themes. Change both together.
+
+  The theme follows the device (prefers-color-scheme) until someone picks one with
+  ThemeToggle, which sets data-theme on <html>. The dark values appear twice below
+  (explicit choice, then device preference); keep the two blocks identical.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --canvas: #f5f4f0;
+  --surface: #fcfbf8;
+  --sunken: #edebe5;
+  --line: #e2dfd7;
+  --line-strong: #8c8679;
+  --ink: #1d1b17;
+  --muted: #5c574e;
+  --accent: #1f5e4b;
+  --accent-hover: #174b3c;
+  --on-accent: #ffffff;
+  --danger: #a3341f;
+  --danger-hover: #862a18;
+  --on-danger: #ffffff;
+  --warning: #8a5800;
+  --meter-track: #dcd8cf;
+  --meter-fill: #3b3832;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #161513;
+  --surface: #1e1d1a;
+  --sunken: #292724;
+  --line: #33312c;
+  --line-strong: #7f796e;
+  --ink: #edeae4;
+  --muted: #a9a397;
+  --accent: #7dc2a6;
+  --accent-hover: #98d2bb;
+  --on-accent: #0e2a20;
+  --danger: #f0907d;
+  --danger-hover: #f5aa9b;
+  --on-danger: #2b0e08;
+  --warning: #e2ae55;
+  --meter-track: #3a3833;
+  --meter-fill: #cfcac0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --canvas: #161513;
+    --surface: #1e1d1a;
+    --sunken: #292724;
+    --line: #33312c;
+    --line-strong: #7f796e;
+    --ink: #edeae4;
+    --muted: #a9a397;
+    --accent: #7dc2a6;
+    --accent-hover: #98d2bb;
+    --on-accent: #0e2a20;
+    --danger: #f0907d;
+    --danger-hover: #f5aa9b;
+    --on-danger: #2b0e08;
+    --warning: #e2ae55;
+    --meter-track: #3a3833;
+    --meter-fill: #cfcac0;
+  }
+}
+
+/* `dark:` matches the effective theme: an explicit choice, else the device setting. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
+/*
+  Only these tokens exist as utilities: Tailwind's default palette, radii and shadows
+  are switched off so every screen draws from the same small set.
+*/
+@theme {
+  --color-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+
+  --radius-control: 6px;
+  --radius-surface: 10px;
+  --shadow-overlay: 0 16px 40px rgb(0 0 0 / 0.2), 0 2px 6px rgb(0 0 0 / 0.1);
+
+  /* The one amount that matters on a screen. Larger than the page title on purpose. */
+  --text-focal: clamp(2.125rem, 1.6rem + 2.4vw, 2.75rem);
+  --text-focal--line-height: 1.1;
+  --text-focal--letter-spacing: -0.01em;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --font-sans: var(--font-plex), ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-on-danger: var(--on-danger);
+  --color-warning: var(--warning);
+  --color-meter-track: var(--meter-track);
+  --color-meter-fill: var(--meter-fill);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+/*
+  State changes only (hover, press, a meter filling). Off for people who ask for less motion.
+  The focus ring is left out on purpose: it must appear at full strength at once.
+*/
+@utility transition-state {
+  transition-property: color, background-color, border-color, text-decoration-color, width;
+  transition-duration: 140ms;
+  transition-timing-function: ease-out;
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+@layer base {
+  html {
+    background-color: var(--canvas);
+    color: var(--ink);
+  }
+
+  a[href] {
+    color: var(--accent);
+    text-decoration-line: underline;
+    text-underline-offset: 0.2em;
+  }
+  a[href]:hover {
+    text-decoration-thickness: 2px;
+  }
+
+  /* One focus ring for everything, 3:1 or better against canvas and surface in both themes. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Pointer on every enabled control, set once here (Tailwind's reset gives buttons the arrow). */
+  a[href],
+  button,
+  summary,
+  select,
+  label[for],
+  label:has(> input[type="checkbox"], > input[type="radio"]),
+  [role="button"],
+  [role="link"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"],
+  [role="switch"],
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="file"],
+  input[type="submit"],
+  input[type="button"],
+  input[type="reset"],
+  input[type="range"],
+  input[type="color"] {
+    cursor: pointer;
+  }
+  :disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  /* Keep the page behind an open modal from scrolling. */
+  html:has(dialog:modal) {
+    overflow: hidden;
+  }
 }
