@@ -54,4 +54,11 @@ describe('parseTransactionForm', () => {
       ['items.0.lineTotal', 'items.0.name', 'items.0.quantity', 'items.0.unitPrice', 'merchant', 'occurredAt', 'paymentMethod', 'total'].sort(),
     );
   });
+
+  it('passes on the scanned receipt to link, and nothing when there is none', () => {
+    const scanned = parseTransactionForm(form([...base, ['receiptUploadId', 'u1']]));
+    const manual = parseTransactionForm(form(base));
+    expect(scanned.ok && scanned.input.receiptUploadId).toBe('u1');
+    expect(manual.ok && 'receiptUploadId' in manual.input).toBe(false);
+  });
 });

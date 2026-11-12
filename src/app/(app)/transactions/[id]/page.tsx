@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
+import { BesidePhoto, ReceiptPhoto } from '@/components/receipt-photo';
 import { TransactionForm } from '@/components/transaction-form';
 import { requireViewer } from '@/lib/auth/viewer';
 import { listBudgetNames } from '@/lib/budgets';
@@ -49,22 +50,35 @@ async function Transaction({ params }: Pick<PageProps<'/transactions/[id]'>, 'pa
       ? [...active, { id: transaction.budgetId, name: `${transaction.budgetName} (archived)` }]
       : active;
 
+  const form = (
+    <TransactionForm
+      action={updateTransactionAction}
+      budgets={budgets}
+      initial={transaction}
+      hidden={{ transactionId: id }}
+      submitLabel="Save changes"
+      cancelHref={`/transactions?month=${month}`}
+    />
+  );
+
   return (
     <>
       <PageHeader title="Edit transaction" action={<DeleteTransaction id={id} merchant={transaction.merchant} month={month} />} />
       <p className="mt-1 text-muted">Added by {transaction.createdByName}</p>
       <div className="mt-6">
-        <TransactionForm
-          action={updateTransactionAction}
-          budgets={budgets}
-          initial={transaction}
-          hidden={{ transactionId: id }}
-          submitLabel="Save changes"
-          cancelHref={`/transactions?month=${month}`}
-        />
+        {transaction.receiptUploadId ? (
+          <BesidePhoto photo={<Photo transaction={transaction} />}>{form}</BesidePhoto>
+        ) : (
+          form
+        )}
       </div>
     </>
   );
+}
+
+/** Served by /api/receipts/[id], which checks again that this person may see it. */
+function Photo({ transaction: t }: { transaction: TransactionDetail }) {
+  return <ReceiptPhoto src={`/api/receipts/${t.receiptUploadId}`} alt={`Receipt from ${t.merchant}`} />;
 }
 
 function ReadOnly({ transaction: t }: { transaction: TransactionDetail }) {
@@ -108,6 +122,16 @@ function ReadOnly({ transaction: t }: { transaction: TransactionDetail }) {
               </li>
             ))}
           </ul>
+        </section>
+      )}
+      {t.receiptUploadId && (
+        <section className="mt-6" aria-labelledby="receipt-heading">
+          <h2 id="receipt-heading" className="text-lg font-semibold text-ink">
+            Receipt
+          </h2>
+          <div className="mt-2 max-w-xs">
+            <Photo transaction={t} />
+          </div>
         </section>
       )}
       <p className="mt-6 text-muted">Only {t.createdByName} or the owner can change this transaction.</p>

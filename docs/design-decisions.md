@@ -38,6 +38,9 @@ shows them all. Change a value here and in `globals.css` together.
 | Dashboard layout | One column on phones; from 1024px the budget picture on the left, latest transactions and debts in a 20rem column beside it | The month reads top to bottom by importance on a phone and without scrolling on a wide screen. |
 | Spending bars | Plain 10px bars in `meter-fill`, no track, scaled to the largest amount, the RM amount written beside each | A picture of numbers already on screen; no track and no tick keep them distinct from the meter. |
 | Attention banner | A surface with a 1px red border when a budget is over, amber when only near limit, each budget named with its state word | Calls out what needs a look before the full list, with the word carrying the meaning. |
+| Scan receipt button | Primary, with the camera icon, before Add manually (secondary) on Home and Transactions | Most entries start from a receipt on a phone; the camera is the one place an icon reads faster than the word. |
+| Photo pickers | "Take a photo" (opens the camera) only on touch screens, "Choose a photo" everywhere; primary where it is the only one | A mouse user has no camera to open, and a phone user still needs the gallery for a screenshot. |
+| Receipt photo | A fixed frame, 288px tall on phones and 3:4 from 1024px, photo letterboxed on `sunken`; beside the form (kept in view) on wide screens, above it on phones | Nothing shifts while it loads, and the receipt stays next to the fields it is checked against. |
 
 ## Colour tokens
 

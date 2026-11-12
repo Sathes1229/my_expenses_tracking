@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import { Button } from '@/components/button';
 import { ButtonLink } from '@/components/button-link';
 import { EmptyState } from '@/components/empty-state';
+import { CameraIcon } from '@/components/icons';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
 import { Select } from '@/components/select';
@@ -83,11 +84,21 @@ async function Transactions({ searchParams }: Pick<PageProps<'/transactions'>, '
   ]);
   const filtered = Boolean(choices.budget || choices.person || choices.method);
   const shownSen = rows.reduce((sum, row) => sum + row.totalSen, 0);
-  const addButton = <ButtonLink href="/transactions/new">Add manually</ButtonLink>;
+  const addButtons = (
+    <>
+      <ButtonLink href="/transactions/scan" className="gap-2">
+        <CameraIcon />
+        Scan receipt
+      </ButtonLink>
+      <ButtonLink href="/transactions/new" variant="secondary">
+        Add manually
+      </ButtonLink>
+    </>
+  );
 
   return (
     <>
-      <PageHeader title="Transactions" action={rows.length > 0 ? addButton : undefined} />
+      <PageHeader title="Transactions" action={rows.length > 0 ? addButtons : undefined} />
 
       <nav aria-label="Month" className="mt-4 flex flex-wrap items-center gap-2">
         <p className="w-full text-lg font-semibold text-ink">
@@ -159,7 +170,7 @@ async function Transactions({ searchParams }: Pick<PageProps<'/transactions'>, '
           ) : (
             <EmptyState
               title={`No transactions in ${monthLabel(month)}`}
-              action={addButton}
+              action={addButtons}
             >
               {isGuest ? 'Only the ones you add show here.' : undefined}
             </EmptyState>

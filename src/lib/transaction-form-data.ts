@@ -22,7 +22,7 @@ function strings(formData: FormData, name: string): string[] {
 }
 
 /** Malaysia wall-clock date and time to an instant, or null when either is not a real date and time. */
-function readWhen(date: string, time: string): Date | null {
+export function readWhen(date: string, time: string): Date | null {
   if (!DATE.test(date) || !TIME.test(time)) return null;
   try {
     const when = fromLocalDateTime(date, time);
@@ -81,6 +81,8 @@ export function parseTransactionForm(formData: FormData): ParsedForm {
   if (Object.keys(errors).length > 0 || totalSen === null || !occurredAt) return { ok: false, errors };
 
   const budgetId = formText(formData, 'budgetId');
+  // Set by the scan page. The lib only links an upload the same person made and nobody has used yet.
+  const receiptUploadId = formText(formData, 'receiptUploadId');
   return {
     ok: true,
     input: {
@@ -92,6 +94,7 @@ export function parseTransactionForm(formData: FormData): ParsedForm {
       budgetId: budgetId === '' ? null : budgetId,
       note: formText(formData, 'note'),
       items,
+      ...(receiptUploadId ? { receiptUploadId } : {}),
     },
   };
 }

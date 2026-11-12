@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import { ButtonLink } from '@/components/button-link';
 import { cx } from '@/components/cx';
 import { EmptyState } from '@/components/empty-state';
+import { CameraIcon } from '@/components/icons';
 import { Meter } from '@/components/meter';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
@@ -76,7 +77,11 @@ async function Home({ searchParams }: Pick<PageProps<'/'>, 'searchParams'>) {
           )}
           {/* First in the column for a guest, who has no total above it. */}
           <div className="mt-6 flex flex-wrap gap-3 first:mt-0">
-            <ButtonLink href="/transactions/new" variant={isOwner && !hasBudgets ? 'secondary' : 'primary'}>
+            <ButtonLink href="/transactions/scan" variant={isOwner && !hasBudgets ? 'secondary' : 'primary'} className="gap-2">
+              <CameraIcon />
+              Scan receipt
+            </ButtonLink>
+            <ButtonLink href="/transactions/new" variant="secondary">
               Add manually
             </ButtonLink>
           </div>
