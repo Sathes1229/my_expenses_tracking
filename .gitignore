@@ -1,0 +1,32 @@
+# Secrets: never commit
+.env
+.env.*
+!.env.example
+
+# Local data: database and uploaded receipts
+/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+/uploads/
+
+# Dependencies and build output
+node_modules/
+.next/
+out/
+build/
+dist/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Logs and OS/editor files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
