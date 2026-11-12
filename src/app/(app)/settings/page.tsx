@@ -60,9 +60,14 @@ async function OwnerSettings() {
       <PageHeader
         title="Settings"
         action={
-          <Link href="/settings/profile" className="inline-flex min-h-11 items-center">
-            Your profile
-          </Link>
+          <>
+            <Link href="/settings/ai" className="inline-flex min-h-11 items-center">
+              AI
+            </Link>
+            <Link href="/settings/profile" className="inline-flex min-h-11 items-center px-2">
+              Your profile
+            </Link>
+          </>
         }
       />
       <section aria-labelledby="people-heading" className="mt-8">
