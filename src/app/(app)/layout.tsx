@@ -54,6 +54,11 @@ async function SignedInShell({ children }: { children: ReactNode }) {
               <Link href="/budgets" className={navLink}>
                 Budgets
               </Link>
+              {viewer.role === 'owner' && (
+                <Link href="/debts" className={navLink}>
+                  Debts
+                </Link>
+              )}
               <Link href={settings.href} className={navLink}>
                 {settings.label}
               </Link>
