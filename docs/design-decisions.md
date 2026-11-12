@@ -33,6 +33,11 @@ shows them all. Change a value here and in `globals.css` together.
 | Field layout | Visible label, hint under it, error above the control | The label never disappears; a phone keyboard cannot cover the error. |
 | Controls | Native `<select>` and `<dialog>` | Phones show their own picker; the browser handles focus trapping and Escape. |
 | Palette lock | Tailwind's default colours, radii and shadows are switched off | Every screen can only use these tokens, so later pages stay consistent. |
+| Navigation | Bottom bar below 1024px, a row in the header from 1024px; text labels, no icons | The main places stay one thumb tap away on a phone; below 1024px the header row would wrap. Words are clearer than new icons. |
+| Current page | A 3px square ink bar (on top of the item in the bottom bar, under the label in the header) plus `aria-current` | Marks where you are without relying on colour, and echoes the square meter ends. |
+| Dashboard layout | One column on phones; from 1024px the budget picture on the left, latest transactions and debts in a 20rem column beside it | The month reads top to bottom by importance on a phone and without scrolling on a wide screen. |
+| Spending bars | Plain 10px bars in `meter-fill`, no track, scaled to the largest amount, the RM amount written beside each | A picture of numbers already on screen; no track and no tick keep them distinct from the meter. |
+| Attention banner | A surface with a 1px red border when a budget is over, amber when only near limit, each budget named with its state word | Calls out what needs a look before the full list, with the word carrying the meaning. |
 
 ## Colour tokens
 
@@ -84,6 +89,8 @@ Text needs 4.5:1; borders, focus ring and meter parts need 3:1.
 | warning fill on meter-track | 4.25 | 5.81 |
 | danger fill on meter-track | 4.81 | 5.01 |
 | ink tick on meter-track | 12.09 | 9.75 |
+| meter-fill (spending bar) on canvas | 10.61 | 11.18 |
+| meter-fill (spending bar) on surface | 11.29 | 10.32 |
 
 The focus ring is the accent, so it meets 3:1 against canvas and surface by the link rows above.
 Where the tick crosses an amber fill the two are close in light (2.85), but the tick reaches 4px

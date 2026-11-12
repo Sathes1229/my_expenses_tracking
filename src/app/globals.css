@@ -135,10 +135,26 @@
   }
 }
 
+/* The page's side margin, widened to clear a notch when a phone is turned sideways. */
+@utility px-page {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
 @layer base {
   html {
     background-color: var(--canvas);
     color: var(--ink);
+  }
+
+  /*
+    Below lg the signed-in pages have a bar fixed to the bottom edge (MainNav). Scrolling to a
+    focused control or an anchor stops above it, so the bar never hides what has focus.
+  */
+  @media (width < 64rem) {
+    html:has([data-bottom-nav]) {
+      scroll-padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+    }
   }
 
   a[href] {

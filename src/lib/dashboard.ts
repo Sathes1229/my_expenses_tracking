@@ -1,0 +1,45 @@
+import type { Viewer } from '@/lib/auth/viewer';
+import { listBudgetSummaries, type BudgetSummary } from './budgets';
+import { debtTotals } from './debts';
+import { listTransactions, type TransactionRow } from './transactions';
+
+export type Dashboard = {
+  month: string;
+  budgets: BudgetSummary[];
+  /** The latest 8 transactions in the month that the viewer may see, newest first. */
+  recent: TransactionRow[];
+  /** Absent for guests. */
+  totals?: { spentSen: number; allocatedSen: number };
+  /** Absent for guests. Largest first; includes Uncategorised and archived budgets when they have spending. */
+  byBudget?: { name: string; spentSen: number }[];
+  /** Owner only. */
+  debts?: { outstandingSen: number; people: { name: string; outstandingSen: number }[] };
+};
+
+const RECENT = 8;
+
+/**
+ * The home page for one month, built only from the reads that already apply each role's
+ * visibility: a guest's summaries carry no amounts and their transaction list holds only their
+ * own rows, so household figures are never computed for them, let alone sent.
+ */
+export async function getDashboard(viewer: Viewer, month: string): Promise<Dashboard> {
+  const [budgets, rows] = await Promise.all([listBudgetSummaries(viewer, month), listTransactions(viewer, { month })]);
+  const dashboard: Dashboard = { month, budgets, recent: rows.slice(0, RECENT) };
+  if (viewer.role === 'guest') return dashboard;
+
+  // Every transaction counts, including Uncategorised and budgets archived since; the allocation
+  // is only the active budgets', since an archived budget has none for the month.
+  const spent = new Map<string, number>();
+  for (const row of rows) spent.set(row.budgetName, (spent.get(row.budgetName) ?? 0) + row.totalSen);
+  dashboard.totals = {
+    spentSen: rows.reduce((sum, row) => sum + row.totalSen, 0),
+    allocatedSen: budgets.reduce((sum, b) => sum + (b.allocationSen ?? 0), 0),
+  };
+  dashboard.byBudget = [...spent]
+    .map(([name, spentSen]) => ({ name, spentSen }))
+    .sort((a, b) => b.spentSen - a.spentSen || a.name.localeCompare(b.name));
+
+  if (viewer.role === 'owner') dashboard.debts = await debtTotals(viewer);
+  return dashboard;
+}

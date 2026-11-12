@@ -1,3 +1,4 @@
+import type { Viewport } from 'next';
 import Link from 'next/link';
 import { Suspense, type ReactNode } from 'react';
 import { NotificationBell } from '@/components/notification-bell';
@@ -6,10 +7,15 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { requireViewer } from '@/lib/auth/viewer';
 import { unreadCount } from '@/lib/notifications';
 import { signOut } from '../sign-out';
+import { MainNav, type NavItem } from './main-nav';
 
 // Signed-in pages wait for a fresh session read on purpose: caching it ('use cache: private')
 // would delay a role change or removal, so these routes opt out of instant-navigation checks.
 export const instant = false;
+
+// Lets the bottom bar and the page edges read the safe-area insets (the home indicator, a notch
+// when the phone is turned sideways); without it browsers report them as zero.
+export const viewport: Viewport = { viewportFit: 'cover' };
 
 /**
  * The guard for every page under (app): nothing renders until requireViewer passes. Pages still
@@ -23,18 +29,24 @@ export default function SignedInLayout({ children }: LayoutProps<'/'>) {
   );
 }
 
-const bar = 'mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2';
+const bar = 'mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-page py-2';
 
-// Styled like a quiet button: these sit beside the theme and sign-out buttons.
-const navLink =
-  'inline-flex min-h-11 items-center rounded-control px-3 font-medium whitespace-nowrap text-ink no-underline transition-state hover:bg-sunken hover:underline';
+// Below the lg breakpoint the bottom bar (3.5rem and its border) sits over the end of the page,
+// so the page ends that much higher, plus the home indicator.
+const mainClass = 'mx-auto w-full max-w-5xl px-page pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-8';
 
 async function SignedInShell({ children }: { children: ReactNode }) {
   const viewer = await requireViewer();
   const unread = await unreadCount(viewer);
-  // Only pages that exist: Settings holds People & invites for the owner; everyone else has Profile.
-  const settings =
-    viewer.role === 'owner' ? { href: '/settings', label: 'Settings' } : { href: '/settings/profile', label: 'Profile' };
+  // Only pages that exist for this role: Debts is the owner's; Settings holds People & invites
+  // for the owner, everyone else has Profile.
+  const items: NavItem[] = [
+    { href: '/', label: 'Home' },
+    { href: '/transactions', label: 'Transactions' },
+    { href: '/budgets', label: 'Budgets' },
+    ...(viewer.role === 'owner' ? [{ href: '/debts', label: 'Debts' }] : []),
+    viewer.role === 'owner' ? { href: '/settings', label: 'Settings' } : { href: '/settings/profile', label: 'Profile' },
+  ];
   return (
     <>
       <header className="border-b border-line bg-surface">
@@ -47,22 +59,7 @@ async function SignedInShell({ children }: { children: ReactNode }) {
             <p className="truncate text-sm text-muted">Signed in as {viewer.displayName}</p>
           </div>
           <div className="flex flex-wrap items-center gap-x-1">
-            <nav aria-label="Main" className="flex items-center">
-              <Link href="/transactions" className={navLink}>
-                Transactions
-              </Link>
-              <Link href="/budgets" className={navLink}>
-                Budgets
-              </Link>
-              {viewer.role === 'owner' && (
-                <Link href="/debts" className={navLink}>
-                  Debts
-                </Link>
-              )}
-              <Link href={settings.href} className={navLink}>
-                {settings.label}
-              </Link>
-            </nav>
+            <MainNav items={items} variant="top" />
             <NotificationBell unread={unread} />
             <ThemeToggle />
             <form action={signOut}>
@@ -71,7 +68,8 @@ async function SignedInShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-5xl px-4 py-8">{children}</main>
+      <MainNav items={items} variant="bottom" />
+      <main className={mainClass}>{children}</main>
     </>
   );
 }
@@ -88,7 +86,7 @@ function ShellLoading() {
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-5xl px-4 py-8">
+      <main className="mx-auto w-full max-w-5xl px-page py-8">
         <p role="status" className="text-muted">
           Loading…
         </p>

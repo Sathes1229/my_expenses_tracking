@@ -5,7 +5,7 @@ import { ErrorState } from '@/components/error-state';
 
 /**
  * The fallback for any page without a closer error boundary: sign in, setup, password pages and
- * the home page. The error itself is never shown; it can hold details meant only for the server log.
+ * the signed-in shell itself. The error itself is never shown; it can hold details meant only for the server log.
  */
 export default function RootError({ retry }: { error: unknown; retry: () => void }) {
   return (
