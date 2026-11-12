@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { checkLoginAllowed, clientIp, recordLoginAttempt } from '@/lib/auth/throttle';
+import {
+  beginLoginAttempt,
+  checkLoginAllowed,
+  clientIp,
+  markLoginSucceeded,
+  recordLoginAttempt,
+} from '@/lib/auth/throttle';
 import { resetDb } from '../helpers/db';
 
 beforeEach(resetDb);
@@ -58,6 +64,29 @@ describe('login throttle', () => {
 
     // Six failures: the lock lifts when the second one (10:00) leaves the window at 10:15.
     expect(await checkLoginAllowed('siti', '1.1.1.1')).toEqual({ allowed: false, retryAfterSec: 300 });
+  });
+});
+
+describe('beginLoginAttempt', () => {
+  it('reserves a failure in the same step as the check', async () => {
+    for (let i = 0; i < 5; i++) expect((await beginLoginAttempt('siti', '1.1.1.1')).allowed).toBe(true);
+    expect(await beginLoginAttempt('siti', '1.1.1.1')).toMatchObject({ allowed: false });
+    expect(await allowed('siti', '1.1.1.1')).toBe(false);
+  });
+
+  it('stops counting an attempt once it is marked as a success', async () => {
+    const first = await beginLoginAttempt('siti', '1.1.1.1');
+    if (!first.allowed) throw new Error('expected the first attempt to be allowed');
+    await markLoginSucceeded(first.attemptIds);
+    for (let i = 0; i < 5; i++) expect((await beginLoginAttempt('siti', '1.1.1.1')).allowed).toBe(true);
+    expect((await beginLoginAttempt('siti', '1.1.1.1')).allowed).toBe(false);
+  });
+
+  it('refuses without reserving anything while locked', async () => {
+    for (let i = 0; i < 5; i++) await recordLoginAttempt('siti', '1.1.1.1', false);
+    expect(await beginLoginAttempt('siti', '2.2.2.2')).toMatchObject({ allowed: false });
+    // The address saw no failure of its own, so another username from it is still fine.
+    expect(await allowed('ali', '2.2.2.2')).toBe(true);
   });
 });
 

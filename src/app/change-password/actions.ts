@@ -21,7 +21,7 @@ export async function changePasswordAction(prev: FormState, formData: FormData):
   if (Object.keys(fieldErrors).length > 0) return nextFormState(prev, { fieldErrors });
 
   try {
-    await replaceTemporaryPassword(state.viewer.id, password);
+    await replaceTemporaryPassword(state.viewer.id, password, state.sessionId);
   } catch (error) {
     if (error instanceof ValidationError) {
       return nextFormState(prev, { fieldErrors: { [error.field]: error.message } });

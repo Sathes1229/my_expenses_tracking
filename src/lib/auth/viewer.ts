@@ -9,7 +9,7 @@ import { getAuth } from './auth';
 
 export type Role = 'owner' | 'member' | 'guest';
 export type Viewer = { id: string; role: Role; displayName: string };
-export type SessionState = { viewer: Viewer; mustChangePassword: boolean };
+export type SessionState = { viewer: Viewer; mustChangePassword: boolean; sessionId: string };
 
 async function stateFromHeaders(requestHeaders: Headers): Promise<SessionState | null> {
   const found = await getAuth().api.getSession({
@@ -33,6 +33,7 @@ async function stateFromHeaders(requestHeaders: Headers): Promise<SessionState |
   return {
     viewer: { id: row.id, role: row.role, displayName: row.name },
     mustChangePassword: row.mustChangePassword,
+    sessionId: found.session.id,
   };
 }
 

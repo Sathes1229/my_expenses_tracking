@@ -3,7 +3,7 @@
 import { headers } from 'next/headers';
 import { passwordError } from '@/lib/auth/accounts';
 import { resetOwnerPassword } from '@/lib/auth/owner-reset';
-import { checkLoginAllowed, clientIp, recordLoginAttempt } from '@/lib/auth/throttle';
+import { beginLoginAttempt, clientIp, markLoginSucceeded } from '@/lib/auth/throttle';
 import { ValidationError } from '@/lib/errors';
 import { formText, nextFormState, repeatError, waitText, type FormState } from '@/lib/form-state';
 
@@ -31,9 +31,10 @@ export async function resetOwnerAction(prev: FormState, formData: FormData): Pro
   if (Object.keys(fieldErrors).length > 0) return nextFormState(prev, { fieldErrors });
 
   const ip = clientIp(await headers());
-  const gate = await checkLoginAllowed(THROTTLE_NAME, ip);
-  if (!gate.allowed) {
-    return nextFormState(prev, { message: `Too many wrong tokens. Try again in ${waitText(gate.retryAfterSec)}.` });
+  // Reserved as a failure before the token is checked, so overlapping guesses cannot all pass.
+  const attempt = await beginLoginAttempt(THROTTLE_NAME, ip);
+  if (!attempt.allowed) {
+    return nextFormState(prev, { message: `Too many wrong tokens. Try again in ${waitText(attempt.retryAfterSec)}.` });
   }
 
   let result;
@@ -41,11 +42,14 @@ export async function resetOwnerAction(prev: FormState, formData: FormData): Pro
     result = await resetOwnerPassword(token, password);
   } catch (error) {
     if (error instanceof ValidationError) {
+      // Thrown only after the token matched, so it is not a wrong guess.
+      await markLoginSucceeded(attempt.attemptIds);
       return nextFormState(prev, { fieldErrors: { [error.field]: error.message } });
     }
     throw error;
   }
+  // Only a wrong token counts toward the lock.
+  if (result !== 'invalid') await markLoginSucceeded(attempt.attemptIds);
   if (result === 'ok') return nextFormState(prev, { done: true });
-  if (result === 'invalid') await recordLoginAttempt(THROTTLE_NAME, ip, false);
   return nextFormState(prev, { message: MESSAGES[result] });
 }

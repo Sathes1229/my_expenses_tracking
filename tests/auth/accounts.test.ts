@@ -148,7 +148,38 @@ describe('signIn', () => {
     db.update(user).set({ removedAt: new Date() }).where(eq(user.username, 'siti')).run();
     expect(await signIn('siti', 'password1', '1.1.1.1')).toEqual({ ok: false, reason: 'invalid' });
   });
+
+  // Password checks run off the event loop, so these requests overlap the way real ones do.
+  it('holds the username limit when wrong passwords arrive at once', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 10 }, (_, i) => signIn('siti', 'wrongpass', `10.0.0.${i}`)),
+    );
+    expect(tally(results)).toEqual({ invalid: 5, locked: 5 });
+  });
+
+  it('holds the address limit when sign-ins for many usernames arrive at once', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 25 }, (_, i) => signIn(`user${i}`, 'wrongpass', '10.9.9.9')),
+    );
+    expect(tally(results)).toEqual({ invalid: 20, locked: 5 });
+  });
+
+  it('does not count a successful sign-in toward the lock', async () => {
+    for (let i = 0; i < 4; i++) await signIn('siti', 'wrongpass', '1.1.1.1');
+    expect(await signIn('siti', 'password1', '1.1.1.1')).toEqual({ ok: true });
+    expect(await signIn('siti', 'wrongpass', '1.1.1.1')).toEqual({ ok: false, reason: 'invalid' });
+    expect(await signIn('siti', 'password1', '1.1.1.1')).toMatchObject({ ok: false, reason: 'locked' });
+  });
 });
+
+function tally(results: Array<Awaited<ReturnType<typeof signIn>>>): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const r of results) {
+    const outcome = r.ok ? 'ok' : r.reason;
+    counts[outcome] = (counts[outcome] ?? 0) + 1;
+  }
+  return counts;
+}
 
 describe('viewerFromHeaders', () => {
   it('returns null without a session', async () => {
@@ -186,5 +217,36 @@ describe('replaceTemporaryPassword', () => {
     expect(db.select().from(user).where(eq(user.id, id)).get()?.mustChangePassword).toBe(false);
     expect(await signIn('siti', 'myownpass1', '1.1.1.1')).toEqual({ ok: true });
     expect((await signIn('siti', 'temporary1', '1.1.1.1')).ok).toBe(false);
+  });
+
+  it('signs out every other session, which the temporary password could have opened', async () => {
+    const { id } = await createAccount({
+      username: 'siti',
+      displayName: 'Siti',
+      password: 'temporary1',
+      role: 'member',
+      mustChangePassword: true,
+    });
+    const mine = new Headers({ cookie: await sessionCookie('siti', 'temporary1') });
+    const other = new Headers({ cookie: await sessionCookie('siti', 'temporary1') });
+    const current = await getAuth().api.getSession({ headers: mine });
+
+    await replaceTemporaryPassword(id, 'myownpass1', current!.session.id);
+
+    expect(await viewerFromHeaders(other)).toBeNull();
+    expect(await viewerFromHeaders(mine)).toEqual({ id, role: 'member', displayName: 'Siti' });
+  });
+
+  it('signs out every session when no current session is given', async () => {
+    const { id } = await createAccount({
+      username: 'siti',
+      displayName: 'Siti',
+      password: 'temporary1',
+      role: 'member',
+      mustChangePassword: true,
+    });
+    const headers = new Headers({ cookie: await sessionCookie('siti', 'temporary1') });
+    await replaceTemporaryPassword(id, 'myownpass1');
+    expect(await viewerFromHeaders(headers)).toBeNull();
   });
 });

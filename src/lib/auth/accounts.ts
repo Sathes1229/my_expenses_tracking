@@ -4,7 +4,7 @@ import { db } from '@/db/client';
 import { user } from '@/db/schema';
 import { ValidationError } from '@/lib/errors';
 import { getAuth } from './auth';
-import { checkLoginAllowed, recordLoginAttempt } from './throttle';
+import { beginLoginAttempt, markLoginSucceeded } from './throttle';
 import type { Role } from './viewer';
 
 const USERNAME_PATTERN = /^[a-z0-9._]{3,30}$/;
@@ -108,14 +108,14 @@ export type SignInResult =
   | { ok: false; reason: 'invalid' | 'locked'; retryAfterSec?: number };
 
 /**
- * Checks the throttle, then signs in through Better Auth. In a server action the session cookie
- * is set by the nextCookies plugin. Wrong username, wrong password and removed person all look alike.
+ * Reserves the attempt in the throttle (as a failure until proven right), then signs in through
+ * Better Auth. In a server action the session cookie is set by the nextCookies plugin. Wrong
+ * username, wrong password and removed person all look alike.
  */
 export async function signIn(username: string, password: string, ip: string): Promise<SignInResult> {
-  const gate = await checkLoginAllowed(username, ip);
-  if (!gate.allowed) return { ok: false, reason: 'locked', retryAfterSec: gate.retryAfterSec };
+  const attempt = await beginLoginAttempt(username, ip);
+  if (!attempt.allowed) return { ok: false, reason: 'locked', retryAfterSec: attempt.retryAfterSec };
 
-  let ok = true;
   try {
     await getAuth().api.signInUsername({
       body: { username: normalizeUsername(username), password },
@@ -123,15 +123,24 @@ export async function signIn(username: string, password: string, ip: string): Pr
       headers: new Headers({ 'x-forwarded-for': ip }),
     });
   } catch (error) {
+    // Any other error leaves the reserved failure in place, which errs on the safe side.
     if (!isAPIError(error)) throw error;
-    ok = false;
+    return { ok: false, reason: 'invalid' };
   }
-  await recordLoginAttempt(username, ip, ok);
-  return ok ? { ok: true } : { ok: false, reason: 'invalid' };
+  await markLoginSucceeded(attempt.attemptIds);
+  return { ok: true };
 }
 
-/** Replaces a temporary password chosen by the owner with the person's own. */
-export async function replaceTemporaryPassword(userId: string, newPassword: string): Promise<void> {
+/**
+ * Replaces a temporary password chosen by the owner with the person's own, and signs out every
+ * other session: one opened with the temporary password would otherwise gain full access once
+ * the flag clears. Pass the current session's id to keep it.
+ */
+export async function replaceTemporaryPassword(
+  userId: string,
+  newPassword: string,
+  keepSessionId?: string,
+): Promise<void> {
   const problem = passwordError(newPassword);
   if (problem) throw new ValidationError('password', problem);
 
@@ -141,5 +150,10 @@ export async function replaceTemporaryPassword(userId: string, newPassword: stri
     throw new ValidationError('password', 'Choose a password different from the temporary one.');
   }
   await ctx.internalAdapter.updatePassword(userId, await ctx.password.hash(newPassword));
+  const others = (await ctx.internalAdapter.listSessions(userId))
+    .filter((s) => s.id !== keepSessionId)
+    .map((s) => s.token);
+  if (others.length > 0) await ctx.internalAdapter.deleteSessions(others);
+  // Cleared last, so no other session is ever both alive and free of the flag.
   db.update(user).set({ mustChangePassword: false }).where(eq(user.id, userId)).run();
 }
