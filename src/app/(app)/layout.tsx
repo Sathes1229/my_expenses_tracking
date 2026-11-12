@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { Suspense, type ReactNode } from 'react';
+import { NotificationBell } from '@/components/notification-bell';
 import { SubmitButton } from '@/components/submit-button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { requireViewer } from '@/lib/auth/viewer';
+import { unreadCount } from '@/lib/notifications';
 import { signOut } from '../sign-out';
 
 // Signed-in pages wait for a fresh session read on purpose: caching it ('use cache: private')
@@ -29,6 +31,7 @@ const navLink =
 
 async function SignedInShell({ children }: { children: ReactNode }) {
   const viewer = await requireViewer();
+  const unread = await unreadCount(viewer);
   // Only pages that exist: Settings holds People & invites for the owner; everyone else has Profile.
   const settings =
     viewer.role === 'owner' ? { href: '/settings', label: 'Settings' } : { href: '/settings/profile', label: 'Profile' };
@@ -55,6 +58,7 @@ async function SignedInShell({ children }: { children: ReactNode }) {
                 {settings.label}
               </Link>
             </nav>
+            <NotificationBell unread={unread} />
             <ThemeToggle />
             <form action={signOut}>
               <SubmitButton variant="quiet" className="whitespace-nowrap">Sign out</SubmitButton>

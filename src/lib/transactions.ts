@@ -3,7 +3,8 @@ import { db } from '@/db/client';
 import { budgets, receiptUploads, transactionItems, transactions, user } from '@/db/schema';
 import type { Viewer } from '@/lib/auth/viewer';
 import { ForbiddenError, ValidationError } from '@/lib/errors';
-import { monthRange } from './time';
+import { evaluateBudgetAlerts } from './notifications';
+import { monthKey, monthRange } from './time';
 import { PAYMENT_METHODS, UNCATEGORISED, type ItemInput, type PaymentMethod, type TransactionInput } from './transaction-types';
 
 export * from './transaction-types';
@@ -145,9 +146,28 @@ function linkReceipt(tx: Tx, viewer: Viewer, transactionId: string, uploadId: st
     .run();
 }
 
+/**
+ * Runs after a write has committed, for each budget and month it touched. A failure here must not
+ * make a saved change look failed, so it is logged and left.
+ */
+async function alertAfterWrite(touched: { budgetId: string | null; occurredAt: number }[]): Promise<void> {
+  const seen = new Set<string>();
+  for (const { budgetId, occurredAt } of touched) {
+    const month = monthKey(new Date(occurredAt));
+    const key = `${budgetId}|${month}`;
+    if (budgetId === null || seen.has(key)) continue;
+    seen.add(key);
+    try {
+      await evaluateBudgetAlerts(budgetId, month);
+    } catch (error) {
+      console.error('Could not check budget alerts', error);
+    }
+  }
+}
+
 export async function createTransaction(viewer: Viewer, input: TransactionInput): Promise<{ id: string }> {
   const data = clean(input);
-  return db.transaction((tx) => {
+  const created = db.transaction((tx) => {
     const budgetId = checkBudget(tx, input.budgetId);
     const { items, ...columns } = data;
     const { id } = tx
@@ -157,14 +177,16 @@ export async function createTransaction(viewer: Viewer, input: TransactionInput)
       .get();
     writeItems(tx, id, items);
     linkReceipt(tx, viewer, id, input.receiptUploadId);
-    return { id };
+    return { id, budgetId, occurredAt: data.occurredAt };
   });
+  await alertAfterWrite([created]);
+  return { id: created.id };
 }
 
 /** The row's maker, for the permission check. A missing row is its own error. */
 function owned(tx: Tx, viewer: Viewer, id: string) {
   const row = tx
-    .select({ createdBy: transactions.createdBy, budgetId: transactions.budgetId })
+    .select({ createdBy: transactions.createdBy, budgetId: transactions.budgetId, occurredAt: transactions.occurredAt })
     .from(transactions)
     .where(eq(transactions.id, id))
     .get();
@@ -174,7 +196,7 @@ function owned(tx: Tx, viewer: Viewer, id: string) {
 }
 
 export async function updateTransaction(viewer: Viewer, id: string, input: TransactionInput): Promise<void> {
-  db.transaction((tx) => {
+  const touched = db.transaction((tx) => {
     const existing = owned(tx, viewer, id);
     const data = clean(input);
     const budgetId = checkBudget(tx, input.budgetId, existing.budgetId);
@@ -186,15 +208,20 @@ export async function updateTransaction(viewer: Viewer, id: string, input: Trans
     tx.delete(transactionItems).where(eq(transactionItems.transactionId, id)).run();
     writeItems(tx, id, items);
     linkReceipt(tx, viewer, id, input.receiptUploadId);
+    return [existing, { budgetId, occurredAt: data.occurredAt }];
   });
+  // The old budget and month are re-checked too; the unique index keeps repeats harmless.
+  await alertAfterWrite(touched);
 }
 
 export async function deleteTransaction(viewer: Viewer, id: string): Promise<void> {
-  db.transaction((tx) => {
-    owned(tx, viewer, id);
+  const removed = db.transaction((tx) => {
+    const existing = owned(tx, viewer, id);
     // Items go with it (cascade); the receipt record stays but points at nothing (set null).
     tx.delete(transactions).where(eq(transactions.id, id)).run();
+    return existing;
   });
+  await alertAfterWrite([removed]);
 }
 
 const hasReceiptSql = sql<number>`exists (select 1 from ${receiptUploads} where ${receiptUploads.transactionId} = ${transactions.id})`;
