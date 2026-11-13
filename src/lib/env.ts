@@ -17,6 +17,10 @@ const schema = z.object({
   OPENAI_API_KEY: optional,
   DEEPSEEK_API_KEY: optional,
   OWNER_RESET_TOKEN: optional,
+  // 1 only behind a reverse proxy that sets x-forwarded-for (see docs/deploy.md).
+  TRUST_PROXY: z
+    .preprocess((v) => (v === '' ? undefined : v), z.enum(['0', '1']).default('0'))
+    .transform((v) => v === '1'),
 });
 
 export type Env = z.infer<typeof schema>;

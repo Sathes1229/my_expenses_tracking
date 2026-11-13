@@ -6,6 +6,7 @@ import {
   markLoginSucceeded,
   recordLoginAttempt,
 } from '@/lib/auth/throttle';
+import { recordSocketAddresses } from '@/lib/socket-address';
 import { resetDb } from '../helpers/db';
 
 beforeEach(resetDb);
@@ -91,9 +92,26 @@ describe('beginLoginAttempt', () => {
 });
 
 describe('clientIp', () => {
-  it('takes the first x-forwarded-for value, then x-real-ip, then a constant', () => {
-    expect(clientIp(new Headers({ 'x-forwarded-for': '203.0.113.7, 10.0.0.1' }))).toBe('203.0.113.7');
-    expect(clientIp(new Headers({ 'x-real-ip': '198.51.100.2' }))).toBe('198.51.100.2');
-    expect(clientIp(new Headers())).toBe('unknown');
+  const socketHeader = recordSocketAddresses();
+
+  it('with TRUST_PROXY off, uses the socket address and ignores a forged x-forwarded-for', () => {
+    const headers = new Headers({ [socketHeader]: '192.168.1.20', 'x-forwarded-for': '203.0.113.9' });
+    expect(clientIp(headers, false)).toBe('192.168.1.20');
+    expect(clientIp(new Headers({ 'x-forwarded-for': '203.0.113.9', 'x-real-ip': '203.0.113.9' }), false)).toBe(
+      'unknown',
+    );
+  });
+
+  it('with TRUST_PROXY on, takes the address the proxy added: the last x-forwarded-for entry', () => {
+    // The client sent 198.51.100.4 itself; the proxy appended the address it saw.
+    const forged = new Headers({ [socketHeader]: '10.0.0.2', 'x-forwarded-for': '198.51.100.4, 203.0.113.7' });
+    expect(clientIp(forged, true)).toBe('203.0.113.7');
+    expect(clientIp(new Headers({ 'x-forwarded-for': '203.0.113.7' }), true)).toBe('203.0.113.7');
+    expect(clientIp(new Headers(), true)).toBe('unknown');
+  });
+
+  it('follows the TRUST_PROXY setting, off unless set', () => {
+    const headers = new Headers({ [socketHeader]: '192.168.1.20', 'x-forwarded-for': '203.0.113.9' });
+    expect(clientIp(headers)).toBe('192.168.1.20');
   });
 });

@@ -1,6 +1,8 @@
 import { and, asc, eq, gt, inArray, lt } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { loginAttempts } from '@/db/schema';
+import { env } from '@/lib/env';
+import { socketAddress } from '@/lib/socket-address';
 
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_FAILURES_PER_USERNAME = 5;
@@ -93,10 +95,11 @@ export async function recordLoginAttempt(username: string, ip: string, success: 
 }
 
 /**
- * The address to throttle by. Next fills x-forwarded-for with the socket address when a request
- * arrives without one; behind a reverse proxy (phase 2) the proxy sets it.
+ * The address to throttle by. Next fills x-forwarded-for from the socket only when the request has
+ * none, so a client can send its own; it is read only when TRUST_PROXY says a proxy wrote it. That
+ * proxy adds the address it saw last, after anything the client sent.
  */
-export function clientIp(headers: Headers): string {
-  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  return forwarded || headers.get('x-real-ip')?.trim() || 'unknown';
+export function clientIp(headers: Headers, trustProxy = env.TRUST_PROXY): string {
+  if (!trustProxy) return socketAddress(headers) ?? 'unknown';
+  return headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() || 'unknown';
 }
