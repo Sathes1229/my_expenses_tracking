@@ -19,13 +19,18 @@ const STATUS_TONE: Record<DebtStatus, string> = {
   paid: 'text-muted',
 };
 
+// Sentence case, like the budget states ("Near limit").
+const STATUS_WORD: Record<DebtStatus, string> = {
+  unpaid: 'Unpaid',
+  'partly paid': 'Partly paid',
+  paid: 'Paid',
+};
+
 function StatusWord({ status }: { status: DebtStatus }) {
   return (
-    <span
-      className={cx('inline-flex items-center gap-1.5 text-sm font-medium whitespace-nowrap capitalize', STATUS_TONE[status])}
-    >
+    <span className={cx('inline-flex items-center gap-1.5 text-sm font-medium whitespace-nowrap', STATUS_TONE[status])}>
       <span aria-hidden="true" className="size-2 shrink-0 bg-current" />
-      {status}
+      {STATUS_WORD[status]}
     </span>
   );
 }
