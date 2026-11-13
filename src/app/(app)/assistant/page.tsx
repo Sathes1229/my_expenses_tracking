@@ -8,7 +8,8 @@ import { getAiSettings } from '@/lib/ai/settings';
 import { requireViewer } from '@/lib/auth/viewer';
 import type { BudgetState } from '@/lib/budget-state';
 import { formatUsd } from '@/lib/money';
-import { Chat, type Availability } from './chat';
+import type { Availability } from './availability';
+import { Chat } from './chat';
 
 export const metadata: Metadata = { title: 'Assistant | My Expenses' };
 

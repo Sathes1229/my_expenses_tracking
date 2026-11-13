@@ -11,8 +11,8 @@ import { controlClass } from '@/components/field';
 import { SubmitButton } from '@/components/submit-button';
 import { initialFormState } from '@/lib/form-state';
 import { clearChatAction } from './actions';
+import { refuse, shown, startGate, withReading, type Availability, type ChatGate } from './availability';
 
-export type Availability = 'ready' | 'used_up' | 'not_configured';
 export type ShownMessage = { id: string; role: 'user' | 'assistant'; content: string };
 
 type Pending = { id: string; question: string; answer: string };
@@ -53,10 +53,12 @@ export function Chat({
   const [pending, setPending] = useState<Pending | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
-  // Set when a send was refused; the page's own reading catches up on the next refresh.
-  const [refused, setRefused] = useState<Exclude<Availability, 'ready'> | null>(null);
+  // A refused send shows at once; the page's next different reading replaces it (see withReading).
+  const [gate, setGate] = useState<ChatGate>(() => startGate(availability));
+  const current = withReading(gate, availability);
+  if (current !== gate) setGate(current);
   const [clearing, setClearing] = useState(false);
-  const state = refused ?? availability;
+  const state = shown(current);
 
   const inflight = useRef<AbortController | null>(null);
   const nextId = useRef(0);
@@ -133,7 +135,7 @@ export function Chat({
       if (code === 'budget_used' || code === 'not_configured') {
         setPending(null);
         setDraft(question);
-        setRefused(code === 'budget_used' ? 'used_up' : 'not_configured');
+        setGate((g) => refuse(g, code === 'budget_used' ? 'used_up' : 'not_configured'));
         router.refresh(); // the budget line above the conversation
       } else {
         giveBack(question, problemFor(code, maxChars));
