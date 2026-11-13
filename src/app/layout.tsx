@@ -14,6 +14,9 @@ const plex = IBM_Plex_Sans({
 export const metadata: Metadata = {
   title: "My Expenses",
   description: "Household expense tracker",
+  // No icon until the owner chooses one (the name stays plain text). An empty data URL says so,
+  // so browsers stop asking for /favicon.ico and logging a 404 on every first visit.
+  icons: { icon: "data:," },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
