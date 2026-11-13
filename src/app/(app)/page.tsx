@@ -221,7 +221,7 @@ function SpendingByBudget({ rows }: { rows: NonNullable<Dashboard['byBudget']> }
       <ul className="mt-3 flex flex-col gap-3">
         {rows.map((row) => (
           <li
-            key={row.name}
+            key={row.id ?? 'uncategorised'}
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_auto]"
           >
             <span className="col-start-1 row-start-1 min-w-0 break-words text-ink">{row.name}</span>

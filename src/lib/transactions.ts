@@ -15,6 +15,8 @@ export type TransactionRow = {
   occurredAt: Date;
   totalSen: number;
   paymentMethod: PaymentMethod;
+  /** `null` is Uncategorised. Names can repeat (an archived budget and a new one), ids cannot. */
+  budgetId: string | null;
   budgetName: string;
   createdById: string;
   createdByName: string;
@@ -25,7 +27,6 @@ export type TransactionRow = {
 export type TransactionDetail = TransactionRow & {
   receiptNumber?: string;
   note?: string;
-  budgetId: string | null;
   items: ItemInput[];
   receiptUploadId?: string;
 };
@@ -256,6 +257,7 @@ function toRow(viewer: Viewer, r: RawRow): TransactionRow {
     occurredAt: new Date(r.occurredAt),
     totalSen: r.totalSen,
     paymentMethod: r.paymentMethod as PaymentMethod,
+    budgetId: r.budgetId,
     budgetName: r.budgetName ?? UNCATEGORISED,
     createdById: r.createdById,
     createdByName: r.createdByName ?? 'Unknown',
@@ -287,7 +289,6 @@ export async function getTransaction(viewer: Viewer, id: string): Promise<Transa
     .get();
   return {
     ...toRow(viewer, r),
-    budgetId: r.budgetId,
     items,
     ...(r.receiptNumber ? { receiptNumber: r.receiptNumber } : {}),
     ...(r.note ? { note: r.note } : {}),
