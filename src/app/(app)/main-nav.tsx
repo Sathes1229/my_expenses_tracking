@@ -26,7 +26,7 @@ const look = {
   },
   bottom: {
     nav: 'fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] lg:hidden',
-    // 13px labels so the owner's six items fit a 360px phone; narrower than that, the bar scrolls sideways.
+    // 13px labels so the owner's six items fit a 360px phone in one row.
     list: 'flex overflow-x-auto',
     item: 'flex flex-auto',
     link: 'relative flex min-h-14 flex-auto items-center justify-center px-1 text-[0.8125rem] font-medium whitespace-nowrap text-muted no-underline transition-state hover:bg-sunken hover:text-ink active:bg-sunken',
@@ -34,22 +34,47 @@ const look = {
   },
 } as const;
 
+// Narrower than 360px six items do not fit one row with a 44px target each, so they go in two rows
+// of three, each 44px tall: every item stays in view and one tap away, with no sideways scrolling.
+// The current item's bar moves under its label there; on top it would sit on the row above's label.
+const twoRowsList = 'max-[22.5rem]:grid max-[22.5rem]:grid-cols-3';
+const twoRowsLink = 'max-[22.5rem]:min-h-11';
+const twoRowsCurrent = 'max-[22.5rem]:before:top-auto max-[22.5rem]:before:bottom-1';
+
 /**
  * The main destinations, as a top row on wide screens and a bottom bar on narrower ones. The
  * layout renders both and CSS shows one, so each sits where it is read: the row in the header,
  * the bar straight after it (before the page content), never covering it.
  */
-export function MainNav({ items, variant }: { items: NavItem[]; variant: 'top' | 'bottom' }) {
+export function MainNav({
+  items,
+  variant,
+  twoRows = false,
+}: {
+  items: NavItem[];
+  variant: 'top' | 'bottom';
+  /** Bottom bar only: two rows of three on phones narrower than 360px. */
+  twoRows?: boolean;
+}) {
   const pathname = usePathname();
   const style = look[variant];
+  const rows = variant === 'bottom' && twoRows;
   return (
-    <nav aria-label="Main" className={style.nav} data-bottom-nav={variant === 'bottom' || undefined}>
-      <ul className={style.list}>
+    <nav
+      aria-label="Main"
+      className={style.nav}
+      data-bottom-nav={variant === 'bottom' ? (rows ? 'two-rows' : 'one-row') : undefined}
+    >
+      <ul className={cx(style.list, rows && twoRowsList)}>
         {items.map((item) => {
           const current = currentFor(pathname, item.href);
           return (
             <li key={item.href} className={style.item || undefined}>
-              <Link href={item.href} aria-current={current} className={cx(style.link, current && style.current)}>
+              <Link
+                href={item.href}
+                aria-current={current}
+                className={cx(style.link, rows && twoRowsLink, current && style.current, current && rows && twoRowsCurrent)}
+              >
                 {item.label}
               </Link>
             </li>

@@ -1,6 +1,7 @@
 import type { Viewport } from 'next';
 import Link from 'next/link';
 import { Suspense, type ReactNode } from 'react';
+import { cx } from '@/components/cx';
 import { NotificationBell } from '@/components/notification-bell';
 import { SubmitButton } from '@/components/submit-button';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -34,6 +35,8 @@ const bar = 'mx-auto flex w-full max-w-5xl flex-wrap items-center justify-betwee
 // Below the lg breakpoint the bottom bar (3.5rem and its border) sits over the end of the page,
 // so the page ends that much higher, plus the home indicator.
 const mainClass = 'mx-auto w-full max-w-5xl px-page pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-8';
+// When the bar takes two 2.75rem rows (under 360px), the page ends 2rem higher still.
+const mainTwoRowsClass = 'max-[22.5rem]:pb-[calc(7.5rem+env(safe-area-inset-bottom))]';
 
 async function SignedInShell({ children }: { children: ReactNode }) {
   const viewer = await requireViewer();
@@ -48,6 +51,8 @@ async function SignedInShell({ children }: { children: ReactNode }) {
     { href: '/assistant', label: 'Assistant' },
     viewer.role === 'owner' ? { href: '/settings', label: 'Settings' } : { href: '/settings/profile', label: 'Profile' },
   ];
+  // Six items (the owner's) do not fit one row of the bottom bar on a phone under 360px wide.
+  const twoRows = items.length > 5;
   return (
     <>
       <header className="border-b border-line bg-surface">
@@ -69,8 +74,8 @@ async function SignedInShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <MainNav items={items} variant="bottom" />
-      <main className={mainClass}>{children}</main>
+      <MainNav items={items} variant="bottom" twoRows={twoRows} />
+      <main className={cx(mainClass, twoRows && mainTwoRowsClass)}>{children}</main>
     </>
   );
 }

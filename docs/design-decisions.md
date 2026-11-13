@@ -34,6 +34,7 @@ shows them all. Change a value here and in `globals.css` together.
 | Controls | Native `<select>` and `<dialog>` | Phones show their own picker; the browser handles focus trapping and Escape. |
 | Palette lock | Tailwind's default colours, radii and shadows are switched off | Every screen can only use these tokens, so later pages stay consistent. |
 | Navigation | Bottom bar below 1024px, a row in the header from 1024px; text labels, no icons | The main places stay one thumb tap away on a phone; below 1024px the header row would wrap. Words are clearer than new icons. |
+| Bottom bar under 360px | The owner's six items go in two rows of three, each 44px tall; the current item's bar sits under its label | Six 13px labels need about 347px; one sideways-scrolling row would hide an item and shrink taps under 44px. On top of a second-row item the bar would read as the first row's. |
 | Current page | A 3px square ink bar (on top of the item in the bottom bar, under the label in the header) plus `aria-current` | Marks where you are without relying on colour, and echoes the square meter ends. |
 | Dashboard layout | One column on phones; from 1024px the budget picture on the left, latest transactions and debts in a 20rem column beside it | The month reads top to bottom by importance on a phone and without scrolling on a wide screen. |
 | Spending bars | Plain 10px bars in `meter-fill`, no track, scaled to the largest amount, the RM amount written beside each | A picture of numbers already on screen; no track and no tick keep them distinct from the meter. |
