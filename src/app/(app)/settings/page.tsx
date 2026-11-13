@@ -61,7 +61,8 @@ async function OwnerSettings() {
         title="Settings"
         action={
           <>
-            <Link href="/settings/ai" className="inline-flex min-h-11 items-center">
+            {/* A two-letter label: the minimum width keeps it a 44px target. */}
+            <Link href="/settings/ai" className="inline-flex min-h-11 min-w-11 items-center justify-center px-2">
               AI
             </Link>
             <Link href="/settings/profile" className="inline-flex min-h-11 items-center px-2">
