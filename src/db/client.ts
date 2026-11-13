@@ -5,10 +5,24 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { env } from '@/lib/env';
 import * as schema from './schema';
 
-mkdirSync(dirname(env.DATABASE_PATH), { recursive: true });
+function open() {
+  mkdirSync(dirname(env.DATABASE_PATH), { recursive: true });
+  const sqlite = new Database(env.DATABASE_PATH);
+  sqlite.pragma('journal_mode = WAL');
+  sqlite.pragma('foreign_keys = ON');
+  return drizzle({ client: sqlite, schema });
+}
 
-const sqlite = new Database(env.DATABASE_PATH);
-sqlite.pragma('journal_mode = WAL');
-sqlite.pragma('foreign_keys = ON');
+type Db = ReturnType<typeof open>;
+let instance: Db | undefined;
 
-export const db = drizzle({ client: sqlite, schema });
+/**
+ * Opened on first use rather than at import, so `next build` (which imports this module) creates
+ * no database file. Methods run with the proxy as `this` and read their fields through it.
+ */
+export const db: Db = new Proxy({} as Db, {
+  get(_target, property) {
+    instance ??= open();
+    return Reflect.get(instance, property);
+  },
+});

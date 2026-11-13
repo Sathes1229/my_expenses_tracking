@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
 import { getTableName, isTable } from 'drizzle-orm';
 import * as schema from '@/db/schema';
 import { db } from '@/db/client';
@@ -32,5 +35,28 @@ describe('database', () => {
     await db.insert(schema.settings).values({ key: 'k', value: '"v"' });
     await resetDb();
     expect(await db.select().from(schema.settings)).toEqual([]);
+  });
+});
+
+describe('opening the database', () => {
+  it('creates no folder or file on import, only on first use', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'my-expenses-lazy-'));
+    const path = join(dir, 'nested', 'app.db');
+    const previous = process.env.DATABASE_PATH;
+    process.env.DATABASE_PATH = path;
+    vi.resetModules();
+    let fresh: typeof db | undefined;
+    try {
+      fresh = (await import('@/db/client')).db;
+      expect(existsSync(join(dir, 'nested'))).toBe(false);
+
+      expect(fresh.$client.pragma('journal_mode', { simple: true })).toBe('wal');
+      expect(fresh.$client.pragma('foreign_keys', { simple: true })).toBe(1);
+      expect(existsSync(path)).toBe(true);
+    } finally {
+      if (existsSync(path)) fresh?.$client.close();
+      process.env.DATABASE_PATH = previous;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
