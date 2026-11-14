@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { session, transactions, user } from '@/db/schema';
+import { aiUsage, chatMessages, session, transactions, user } from '@/db/schema';
 import { createAccount, signIn } from '@/lib/auth/accounts';
 import { getAuth } from '@/lib/auth/auth';
 import {
@@ -76,6 +76,34 @@ describe('changes take effect on the next request', () => {
 
     await changeRole(owner, member.id, 'member');
     expect(await viewerFromHeaders(headers)).toEqual(member);
+  });
+});
+
+describe('changeRole', () => {
+  it('clears the assistant conversation of a member made a guest, and keeps their AI usage', async () => {
+    const say = (userId: string, content: string) =>
+      db.insert(chatMessages).values({ userId, role: 'user', content, createdAt: Date.now() }).run();
+    say(member.id, 'How much did the household spend on groceries?');
+    say(owner.id, 'Owner question');
+    say(guest.id, 'Guest question');
+    db.insert(aiUsage)
+      .values({ userId: member.id, day: '2026-11-13', model: 'claude-haiku-5-5', inputTokens: 1, outputTokens: 1, costMicroUsd: 1 })
+      .run();
+    const chatOf = (userId: string) => db.select().from(chatMessages).where(eq(chatMessages.userId, userId)).all();
+
+    await changeRole(owner, member.id, 'guest');
+
+    expect(chatOf(member.id)).toHaveLength(0);
+    expect(chatOf(owner.id)).toHaveLength(1);
+    expect(chatOf(guest.id)).toHaveLength(1);
+    expect(db.select().from(aiUsage).where(eq(aiUsage.userId, member.id)).all()).toHaveLength(1);
+
+    // Back to member: nothing more to clear, and a guest made a member keeps theirs.
+    say(member.id, 'Asked as a guest');
+    await changeRole(owner, member.id, 'member');
+    await changeRole(owner, guest.id, 'member');
+    expect(chatOf(member.id)).toHaveLength(1);
+    expect(chatOf(guest.id)).toHaveLength(1);
   });
 });
 

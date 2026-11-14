@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
 import { and, eq, isNull, ne } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { account, session, user } from '@/db/schema';
+import { account, chatMessages, session, user } from '@/db/schema';
 import { ValidationError } from '@/lib/errors';
 import { displayNameError, passwordError } from './accounts';
 import { getAuth } from './auth';
@@ -72,13 +72,19 @@ export async function listPeople(owner: Viewer): Promise<Person[]> {
     );
 }
 
-/** Takes effect on the person's next request: the viewer's role is read from the database each time. */
+/**
+ * Takes effect on the person's next request: the viewer's role is read from the database each time.
+ * Making someone a guest clears their assistant conversation: answers given to a member hold
+ * household figures, and would stay on the page and go back to the model as history. Their AI usage
+ * stays, so today's budget is unchanged.
+ */
 export async function changeRole(owner: Viewer, userId: string, role: 'member' | 'guest'): Promise<void> {
   assertOwner(owner);
   if (role !== 'member' && role !== 'guest') throw new ValidationError('role', 'Choose Member or Guest.');
   db.transaction((tx) => {
     targetPerson(tx, userId, "The owner's role cannot be changed.");
     tx.update(user).set({ role }).where(eq(user.id, userId)).run();
+    if (role === 'guest') tx.delete(chatMessages).where(eq(chatMessages.userId, userId)).run();
   });
 }
 
