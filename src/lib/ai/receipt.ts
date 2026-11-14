@@ -1,7 +1,7 @@
 import { generateText, NoObjectGeneratedError, Output } from 'ai';
 import { z } from 'zod';
 import { toDraft, type ReceiptDraft } from '@/lib/receipt-draft';
-import { languageModel } from './providers';
+import { describeProviderError, languageModel } from './providers';
 import { getAiSettings } from './settings';
 
 export { toDraft, type ReceiptDraft } from '@/lib/receipt-draft';
@@ -87,8 +87,7 @@ export async function extractReceipt(image: Buffer, budgets: { id: string; name:
   } catch (error) {
     // The model answered, but not in the shape asked for: as good as an unreadable photo.
     if (NoObjectGeneratedError.isInstance(error)) return { ok: false, reason: 'unreadable' };
-    // Name and message only: the full error carries the request body, image included.
-    console.error('Receipt reading failed:', error instanceof Error ? `${error.name}: ${error.message}` : 'unknown error');
+    console.error('Receipt reading failed:', describeProviderError(error));
     return { ok: false, reason: 'provider_error' };
   }
 

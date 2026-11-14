@@ -1,7 +1,8 @@
+import { APICallError, RetryError } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ValidationError } from '@/lib/errors';
 import { costFor, costMicroUsd, MODELS, type ModelInfo } from '@/lib/ai/models';
-import { configuredProviders, languageModel } from '@/lib/ai/providers';
+import { configuredProviders, describeProviderError, languageModel } from '@/lib/ai/providers';
 
 const fixture: ModelInfo = {
   id: 'fixture',
@@ -65,5 +66,26 @@ describe('providers', () => {
     expect(languageModel('claude-sonnet-5-5')).toMatchObject({ modelId: 'claude-sonnet-5-5' });
     expect(() => languageModel('nope')).toThrow(ValidationError);
     expect(() => languageModel('gpt-6-luna')).toThrow(ValidationError);
+  });
+
+  it('describes a provider error by name and HTTP status only, never its text', () => {
+    const refused = new APICallError({
+      message: 'Incorrect API key provided: sk-proj-abc1***************wxyz.',
+      url: 'https://api.openai.com/v1/chat/completions',
+      requestBodyValues: { messages: [] },
+      statusCode: 401,
+      responseBody: '{"error":{"message":"Incorrect API key provided: sk-proj-abc1***************wxyz."}}',
+      isRetryable: false,
+    });
+    expect(describeProviderError(refused)).toBe('AI_APICallError (HTTP 401)');
+
+    const retried = new RetryError({
+      message: `Failed after 3 attempts. Last error: ${refused.message}`,
+      reason: 'maxRetriesExceeded',
+      errors: [refused, refused, refused],
+    });
+    expect(describeProviderError(retried)).toBe('AI_RetryError (HTTP 401)');
+    expect(describeProviderError(new Error('sk-proj-abc1 was refused'))).toBe('Error');
+    expect(describeProviderError('sk-proj-abc1')).toBe('unknown error');
   });
 });

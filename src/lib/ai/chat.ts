@@ -5,7 +5,7 @@ import { chatMessages } from '@/db/schema';
 import type { Viewer } from '@/lib/auth/viewer';
 import { getAiBudgetStatus, recordChatUsage } from './budget';
 import { buildAssistantContext } from './context';
-import { languageModel } from './providers';
+import { describeProviderError, languageModel } from './providers';
 import { getAiSettings } from './settings';
 
 /** The answer-length cap that keeps one request's overshoot of the daily budget small. */
@@ -81,9 +81,6 @@ function recentHistory(viewer: Viewer): { role: 'user' | 'assistant'; content: s
 
 const tokens = (usage: LanguageModelUsage) => ({ input: usage.inputTokens ?? 0, output: usage.outputTokens ?? 0 });
 
-// Name and message only: the full error carries the request body, household figures included.
-const describe = (error: unknown) => (error instanceof Error ? `${error.name}: ${error.message}` : 'unknown error');
-
 /**
  * Asks the owner's chat model with this person's own context and history, resolving once the first
  * words arrive (or the call fails) so the route can still answer with an error status.
@@ -114,7 +111,7 @@ export async function answerChat(viewer: Viewer, question: string, signal?: Abor
     messages,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     abortSignal: AbortSignal.any(stopSignals),
-    onError: ({ error }) => console.error('The assistant could not answer:', describe(error)),
+    onError: ({ error }) => console.error('The assistant could not answer:', describeProviderError(error)),
   });
 
   const encoder = new TextEncoder();
@@ -184,8 +181,8 @@ export async function answerChat(viewer: Viewer, question: string, signal?: Abor
       await recordUnfinished();
       fail();
     } catch (error) {
-      console.error('The assistant answer was not saved:', describe(error));
-      await recordUnfinished().catch((cause) => console.error('Its usage was not recorded:', describe(cause)));
+      console.error('The assistant answer was not saved:', describeProviderError(error));
+      await recordUnfinished().catch((cause) => console.error('Its usage was not recorded:', describeProviderError(cause)));
       fail();
     }
   })();

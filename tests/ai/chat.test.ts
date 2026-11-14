@@ -1,4 +1,5 @@
-import { simulateReadableStream } from 'ai';
+import { inspect } from 'node:util';
+import { APICallError, simulateReadableStream } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -67,6 +68,19 @@ function failing() {
     doStream: async () => {
       throw new Error('provider is down');
     },
+  });
+}
+
+/** A 401 as the OpenAI provider builds it: the provider's own text, masked key included, is the message. */
+function keyRefused() {
+  const text = 'Incorrect API key provided: sk-proj-abc1***************wxyz.';
+  return new APICallError({
+    message: text,
+    url: 'https://api.openai.com/v1/chat/completions',
+    requestBodyValues: {},
+    statusCode: 401,
+    responseBody: JSON.stringify({ error: { message: text } }),
+    isRetryable: false,
   });
 }
 
@@ -264,6 +278,26 @@ describe('POST /api/chat, answers', () => {
     }
     expect(messagesOf(member.id)).toHaveLength(0);
     expect(usageRows()).toHaveLength(0);
+  });
+
+  it('logs a refused key by error name and status, never the provider text that quotes the key', async () => {
+    vi.mocked(languageModel).mockReturnValue(
+      new MockLanguageModelV4({
+        doStream: async () => {
+          throw keyRefused();
+        },
+      }),
+    );
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }));
+      expect(res.status).toBe(502);
+      const text = logged.mock.calls.flat().map((arg) => inspect(arg, { depth: 5 })).join('\n');
+      expect(text).toContain('AI_APICallError (HTTP 401)');
+      expect(text).not.toContain('sk-');
+    } finally {
+      logged.mockRestore();
+    }
   });
 
   it('breaks the stream when the provider fails part way, saves no messages, and counts an estimate', async () => {

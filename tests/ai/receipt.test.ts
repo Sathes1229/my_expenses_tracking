@@ -1,3 +1,5 @@
+import { inspect } from 'node:util';
+import { APICallError } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 import sharp from 'sharp';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -198,5 +200,33 @@ describe('extractReceipt', () => {
     expect(await extractReceipt(img, [])).toEqual({ ok: false, reason: 'provider_error' });
     expect(db.select().from(aiUsage).all()).toHaveLength(0);
     quiet.mockRestore();
+  });
+
+  it('logs a refused key by error name and status, never the provider text that quotes the key', async () => {
+    await configure();
+    const text = 'Incorrect API key provided: sk-proj-abc1***************wxyz.';
+    vi.mocked(languageModel).mockReturnValue(
+      new MockLanguageModelV4({
+        doGenerate: async () => {
+          throw new APICallError({
+            message: text,
+            url: 'https://api.openai.com/v1/chat/completions',
+            requestBodyValues: {},
+            statusCode: 401,
+            responseBody: JSON.stringify({ error: { message: text } }),
+            isRetryable: false,
+          });
+        },
+      }),
+    );
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await extractReceipt(img, [])).toEqual({ ok: false, reason: 'provider_error' });
+      const lines = logged.mock.calls.flat().map((arg) => inspect(arg, { depth: 5 })).join('\n');
+      expect(lines).toContain('AI_APICallError (HTTP 401)');
+      expect(lines).not.toContain('sk-');
+    } finally {
+      logged.mockRestore();
+    }
   });
 });
