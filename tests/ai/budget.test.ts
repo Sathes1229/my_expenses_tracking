@@ -4,7 +4,15 @@ import { aiUsage } from '@/db/schema';
 import { createAccount } from '@/lib/auth/accounts';
 import type { Viewer } from '@/lib/auth/viewer';
 import { ForbiddenError } from '@/lib/errors';
-import { getAiBudgetStatus, recordChatUsage, resetTodayUsage, usageByPersonToday } from '@/lib/ai/budget';
+import {
+  getAiBudgetStatus,
+  recordChatUsage,
+  releaseChatUsage,
+  reserveChatUsage,
+  resetTodayUsage,
+  settleChatUsage,
+  usageByPersonToday,
+} from '@/lib/ai/budget';
 import { costMicroUsd } from '@/lib/ai/models';
 import { setDailyBudget } from '@/lib/ai/settings';
 import { resetDb } from '../helpers/db';
@@ -104,6 +112,36 @@ describe('recordChatUsage', () => {
         costMicroUsd: costMicroUsd('claude-haiku-5-5', 1200, 300),
       }),
     ]);
+  });
+});
+
+describe('reserveChatUsage', () => {
+  it('holds an estimate that counts at once, and refuses once held and used amounts reach the budget', async () => {
+    await recordChatUsage(member.id, 'fixture', 100_000, 40_000); // 0.90 of US$1.00
+    const held = await reserveChatUsage(guest.id, 'fixture', 10_000, 6_000); // +0.12, started under budget
+    expect(held).toEqual(expect.any(String));
+    expect(await getAiBudgetStatus()).toMatchObject({ usedMicroUsd: 1_020_000, available: false });
+
+    expect(await reserveChatUsage(owner.id, 'fixture', 1, 1)).toBeNull();
+    expect(db.select().from(aiUsage).all()).toHaveLength(2);
+  });
+
+  it('settles to the reported tokens, keeping the day and time it was held', async () => {
+    const held = (await reserveChatUsage(member.id, 'fixture', 100_000, 800))!;
+    const before = db.select().from(aiUsage).get()!;
+    later(60_000);
+    await settleChatUsage(held, 'fixture', 1200, 80);
+    expect(db.select().from(aiUsage).all()).toEqual([
+      { ...before, inputTokens: 1200, outputTokens: 80, costMicroUsd: costMicroUsd('fixture', 1200, 80) },
+    ]);
+  });
+
+  it('lets a reservation go, so it no longer counts', async () => {
+    const held = (await reserveChatUsage(member.id, 'fixture', 100_000, 60_000))!;
+    expect((await getAiBudgetStatus()).available).toBe(false);
+    await releaseChatUsage(held);
+    expect(await getAiBudgetStatus()).toMatchObject({ usedMicroUsd: 0, available: true });
+    expect(db.select().from(aiUsage).all()).toHaveLength(0);
   });
 });
 

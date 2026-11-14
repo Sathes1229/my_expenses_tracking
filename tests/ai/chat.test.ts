@@ -378,6 +378,74 @@ describe('POST /api/chat, answers', () => {
     }
   });
 
+  it('holds the estimate while the answer streams, then replaces it with the reported usage', async () => {
+    const model = answering(['You have ', 'RM 760.00 ', 'left.'], { delayMs: 30 });
+    vi.mocked(languageModel).mockReturnValue(model);
+    const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }));
+    const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+    let answer = (await reader.read()).value;
+
+    const [held] = usageRows();
+    expect(usageRows()).toHaveLength(1);
+    expect(held).toMatchObject({ userId: member.id, model: chatModel, ...estimateFor(model) });
+    expect(held.costMicroUsd).toBe(costMicroUsd(chatModel, held.inputTokens, held.outputTokens));
+
+    for (let part = await reader.read(); !part.done; part = await reader.read()) answer += part.value;
+    expect(answer).toBe('You have RM 760.00 left.');
+    expect(usageRows()).toEqual([
+      expect.objectContaining({
+        id: held.id,
+        createdAt: held.createdAt,
+        inputTokens: 1200,
+        outputTokens: 80,
+        costMicroUsd: costMicroUsd(chatModel, 1200, 80),
+      }),
+    ]);
+  });
+
+  it('holds the estimate while the provider is asked, and lets it go when the provider fails before any words', async () => {
+    const heldAtCall: (typeof aiUsage.$inferSelect)[][] = [];
+    const model = new MockLanguageModelV4({
+      doStream: async () => {
+        heldAtCall.push(usageRows());
+        throw new Error('provider is down');
+      },
+    });
+    vi.mocked(languageModel).mockReturnValue(model);
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }));
+      expect(res.status).toBe(502);
+    } finally {
+      quiet.mockRestore();
+    }
+    expect(heldAtCall).toEqual([[expect.objectContaining({ userId: member.id, ...estimateFor(model) })]]);
+    expect(usageRows()).toHaveLength(0);
+  });
+
+  it('answers only one of several questions sent at once when the budget fits only one', async () => {
+    // One answer is held at 800 output tokens at US$20 per million, US$0.016: past US$0.01 on its own.
+    const opus = MODELS.find((m) => m.id === 'claude-opus-5-5')!.id;
+    await setChatModel(owner, opus);
+    await setDailyBudget(owner, '0.01');
+    const model = answering(['One ', 'two ', 'three.'], { delayMs: 30 });
+    vi.mocked(languageModel).mockReturnValue(model);
+    const sessions = [
+      await sessionHeaders('siti', 'password1'),
+      await sessionHeaders('mei', 'password1'),
+      await sessionHeaders('owner', 'password1'),
+    ];
+
+    const answers = await Promise.all(sessions.map((session) => POST(ask(session, { message: 'How am I doing?' }))));
+
+    expect(answers.map((res) => res.status).sort()).toEqual([200, 429, 429]);
+    for (const res of answers.filter((r) => r.status === 429)) expect(await res.json()).toEqual({ error: 'budget_used' });
+    expect(await answers.find((r) => r.status === 200)!.text()).toBe('One two three.');
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(usageRows()).toHaveLength(1);
+    expect(db.select().from(chatMessages).all()).toHaveLength(2);
+  });
+
   it('stops the assistant once abandoned answers have used up the budget', async () => {
     // 800 output tokens at US$10 per million are US$0.008, so the second abandoned answer passes US$0.01.
     const sonnet = MODELS.find((m) => m.id === 'claude-sonnet-5-5')!.id;

@@ -3,7 +3,7 @@ import { asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { chatMessages } from '@/db/schema';
 import type { Viewer } from '@/lib/auth/viewer';
-import { getAiBudgetStatus, recordChatUsage } from './budget';
+import { getAiBudgetStatus, releaseChatUsage, reserveChatUsage, settleChatUsage } from './budget';
 import { buildAssistantContext } from './context';
 import { describeProviderError, languageModel } from './providers';
 import { getAiSettings } from './settings';
@@ -84,9 +84,10 @@ const tokens = (usage: LanguageModelUsage) => ({ input: usage.inputTokens ?? 0, 
 /**
  * Asks the owner's chat model with this person's own context and history, resolving once the first
  * words arrive (or the call fails) so the route can still answer with an error status.
- * Only a complete answer is saved: the reported usage, then the question and answer together.
- * An answer the person leaves, that times out, or that the provider breaks after words were sent
- * saves no messages but still counts against the budget, since the provider bills it.
+ * An estimate is held against the daily budget before the provider is asked, then settled when the
+ * answer ends. Only a complete answer is saved: the reported usage, then the question and answer
+ * together. An answer the person leaves, that times out, or that the provider breaks after words
+ * were sent saves no messages but still counts against the budget, since the provider bills it.
  */
 export async function answerChat(viewer: Viewer, question: string, signal?: AbortSignal): Promise<ChatAnswer> {
   const { chatModel } = await getAiSettings();
@@ -96,17 +97,23 @@ export async function answerChat(viewer: Viewer, question: string, signal?: Abor
   const askedAt = Date.now();
   const instructions = systemPrompt(await buildAssistantContext(viewer));
   const messages: ModelMessage[] = [...recentHistory(viewer), { role: 'user', content: question }];
-  // Counted for an unfinished answer the provider reported nothing for: about three characters per
-  // input token, and the longest answer allowed, so stopping early never costs the budget less.
+  // Held while the answer runs, and kept for an unfinished answer the provider reported nothing for:
+  // about three characters per input token, and the longest answer allowed, so stopping early never
+  // costs the budget less.
   const sentChars = instructions.length + messages.reduce((sum, m) => sum + String(m.content).length, 0);
   const estimate = { input: Math.ceil(sentChars / 3), output: MAX_OUTPUT_TOKENS };
+  const model = languageModel(chatModel);
+  // The budget is checked again here, together with holding the estimate: questions sent at the
+  // same moment all passed the check above, and only as many as the budget fits may go on.
+  const reservation = await reserveChatUsage(viewer.id, chatModel, estimate.input, estimate.output);
+  if (reservation === null) return { ok: false, reason: 'budget_used' };
 
   const stop = new AbortController();
   const stopSignals = [stop.signal, AbortSignal.timeout(ANSWER_TIMEOUT_MS), ...(signal ? [signal] : [])];
   // The person left or the timeout fired, as opposed to the provider failing on its own.
   const stoppedByUs = () => stopSignals.some((s) => s.aborted);
   const result = streamText({
-    model: languageModel(chatModel),
+    model,
     instructions,
     messages,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
@@ -135,18 +142,23 @@ export async function answerChat(viewer: Viewer, question: string, signal?: Abor
   void (async () => {
     let answer = '';
     let sent = false;
-    let recorded = false;
+    let settled = false;
     const reported = { input: 0, output: 0 };
     const record = async (used: { input: number; output: number }) => {
-      recorded = true;
-      await recordChatUsage(viewer.id, chatModel, used.input, used.output);
+      settled = true;
+      await settleChatUsage(reservation, chatModel, used.input, used.output);
     };
     // Once words were sent, or the call was stopped by the person leaving or the timeout, the provider
-    // has billed for it: count what it reported, else the estimate. A provider failure before any
-    // words (the 502 answer) counts nothing.
+    // has billed for it: count what it reported, else keep the estimate. A provider failure before any
+    // words (the 502 answer) counts nothing, so the estimate is let go.
     const recordUnfinished = async () => {
-      if (recorded || !(sent || stoppedByUs())) return;
-      await record(reported.input + reported.output > 0 ? reported : estimate);
+      if (settled) return;
+      if (!(sent || stoppedByUs())) {
+        settled = true;
+        await releaseChatUsage(reservation);
+      } else if (reported.input + reported.output > 0) {
+        await record(reported);
+      }
     };
     try {
       for await (const part of result.stream) {

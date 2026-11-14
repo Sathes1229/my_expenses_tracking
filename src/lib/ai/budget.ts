@@ -4,7 +4,7 @@ import { aiUsage, user } from '@/db/schema';
 import { assertOwner, type Viewer } from '@/lib/auth/viewer';
 import { dayKey } from '@/lib/time';
 import { costMicroUsd } from './models';
-import { getAiSettings, readSetting, writeSetting } from './settings';
+import { dailyBudgetMicroUsd, readSetting, writeSetting } from './settings';
 
 // The daily AI budget caps the assistant only (receipt reading is never counted). "Today" is the
 // Malaysian calendar day, so the count starts again at midnight in Kuala Lumpur.
@@ -19,35 +19,68 @@ function countedToday(): SQL {
   return typeof resetAt === 'number' ? and(today, gt(aiUsage.createdAt, resetAt))! : today;
 }
 
-/**
- * Today's spending against the owner's daily amount. A request that starts while `available` is
- * true may finish even if it goes past the budget (each answer is capped in length); no locking.
- */
-export async function getAiBudgetStatus(): Promise<{ budgetMicroUsd: number; usedMicroUsd: number; available: boolean }> {
-  const { dailyBudgetMicroUsd } = await getAiSettings();
+function budgetStatus() {
+  const budgetMicroUsd = dailyBudgetMicroUsd();
   const row = db
     .select({ used: sql<number>`coalesce(sum(${aiUsage.costMicroUsd}), 0)` })
     .from(aiUsage)
     .where(countedToday())
     .get();
   const usedMicroUsd = row?.used ?? 0;
-  return { budgetMicroUsd: dailyBudgetMicroUsd, usedMicroUsd, available: usedMicroUsd < dailyBudgetMicroUsd };
+  return { budgetMicroUsd, usedMicroUsd, available: usedMicroUsd < budgetMicroUsd };
+}
+
+/**
+ * Today's spending against the owner's daily amount, answers still running included (each holds
+ * its estimate, see reserveChatUsage). A request that starts while `available` is true may finish
+ * even if it goes past the budget, by at most one answer, since each answer is capped in length.
+ */
+export async function getAiBudgetStatus(): Promise<{ budgetMicroUsd: number; usedMicroUsd: number; available: boolean }> {
+  return budgetStatus();
+}
+
+function usageRow(userId: string, modelId: string, inputTokens: number, outputTokens: number) {
+  const now = new Date();
+  return {
+    userId,
+    day: dayKey(now),
+    model: modelId,
+    inputTokens,
+    outputTokens,
+    costMicroUsd: costMicroUsd(modelId, inputTokens, outputTokens),
+    createdAt: now.getTime(),
+  };
 }
 
 /** One assistant answer's tokens as the provider reported them, priced from the model list. */
 export async function recordChatUsage(userId: string, modelId: string, inputTokens: number, outputTokens: number): Promise<void> {
-  const now = new Date();
-  db.insert(aiUsage)
-    .values({
-      userId,
-      day: dayKey(now),
-      model: modelId,
-      inputTokens,
-      outputTokens,
-      costMicroUsd: costMicroUsd(modelId, inputTokens, outputTokens),
-      createdAt: now.getTime(),
-    })
+  db.insert(aiUsage).values(usageRow(userId, modelId, inputTokens, outputTokens)).run();
+}
+
+/**
+ * Holds an answer's estimated tokens against today's budget before the provider is asked, and
+ * returns the row's id; null when the budget is used up. The check and the insert are one
+ * synchronous transaction (the reads share its connection), so questions sent at the same moment
+ * cannot all pass on the same remaining amount. Settle or release the row when the answer ends.
+ */
+export async function reserveChatUsage(userId: string, modelId: string, inputTokens: number, outputTokens: number): Promise<string | null> {
+  return db.transaction((tx) => {
+    if (!budgetStatus().available) return null;
+    return tx.insert(aiUsage).values(usageRow(userId, modelId, inputTokens, outputTokens)).returning({ id: aiUsage.id }).get().id;
+  });
+}
+
+/** Replaces a reservation's estimate with the tokens the provider reported. It keeps its day and time. */
+export async function settleChatUsage(id: string, modelId: string, inputTokens: number, outputTokens: number): Promise<void> {
+  db.update(aiUsage)
+    .set({ inputTokens, outputTokens, costMicroUsd: costMicroUsd(modelId, inputTokens, outputTokens) })
+    .where(eq(aiUsage.id, id))
     .run();
+}
+
+/** Lets a reservation go when the provider billed nothing for it. */
+export async function releaseChatUsage(id: string): Promise<void> {
+  db.delete(aiUsage).where(eq(aiUsage.id, id)).run();
 }
 
 /** Lets everyone use the assistant again today. The rows stay; they simply stop counting. */

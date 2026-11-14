@@ -41,17 +41,21 @@ function usableModel(stored: unknown): string | null {
   return model.id;
 }
 
+/** The owner's daily amount, or the default while none is set. Synchronous, so a transaction can read it. */
+export function dailyBudgetMicroUsd(): number {
+  const budget = readSetting(BUDGET_KEY);
+  return typeof budget === 'number' && Number.isSafeInteger(budget) ? budget : DEFAULT_DAILY_BUDGET_MICRO_USD;
+}
+
 export async function getAiSettings(): Promise<{
   chatModel: string | null;
   receiptModel: string | null;
   dailyBudgetMicroUsd: number;
 }> {
-  const budget = readSetting(BUDGET_KEY);
   return {
     chatModel: usableModel(readSetting(CHAT_KEY)),
     receiptModel: usableModel(readSetting(RECEIPT_KEY)),
-    dailyBudgetMicroUsd:
-      typeof budget === 'number' && Number.isSafeInteger(budget) ? budget : DEFAULT_DAILY_BUDGET_MICRO_USD,
+    dailyBudgetMicroUsd: dailyBudgetMicroUsd(),
   };
 }
 
