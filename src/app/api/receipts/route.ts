@@ -1,5 +1,5 @@
 import { extractReceipt } from '@/lib/ai/receipt';
-import { viewerFromHeaders } from '@/lib/auth/viewer';
+import { stateFromHeaders } from '@/lib/auth/viewer';
 import { listBudgetNames } from '@/lib/budgets';
 import { ValidationError } from '@/lib/errors';
 import { countBytes, declaredLength, fromThisApp, refuse } from '@/lib/request-guards';
@@ -16,8 +16,10 @@ const NO_PHOTO = 'Choose a photo of the receipt.';
  */
 export async function POST(request: Request): Promise<Response> {
   if (!fromThisApp(request)) return refuse(403, 'This upload came from another site, so it was not accepted.');
-  const viewer = await viewerFromHeaders(request.headers);
-  if (!viewer) return refuse(401, 'You are signed out. Sign in again, then scan the receipt.');
+  const state = await stateFromHeaders(request.headers);
+  if (!state) return refuse(401, 'You are signed out. Sign in again, then scan the receipt.');
+  if (state.mustChangePassword) return refuse(403, 'Choose a new password first, then scan the receipt.');
+  const { viewer } = state;
 
   const declared = declaredLength(request);
   // Turned away before the body is read when the request says up front that it is too big. A body

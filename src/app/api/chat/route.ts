@@ -1,5 +1,5 @@
 import { answerChat, checkMessage, type ChatRefusal } from '@/lib/ai/chat';
-import { viewerFromHeaders } from '@/lib/auth/viewer';
+import { stateFromHeaders } from '@/lib/auth/viewer';
 import { countBytes, declaredLength, fromThisApp, refuse } from '@/lib/request-guards';
 
 // A 2000-character question in JSON is at most about 12 KB, even written as \u escapes.
@@ -13,8 +13,10 @@ const STATUS: Record<ChatRefusal, number> = { not_configured: 409, budget_used: 
  */
 export async function POST(request: Request): Promise<Response> {
   if (!fromThisApp(request)) return refuse(403, 'other_site');
-  const viewer = await viewerFromHeaders(request.headers);
-  if (!viewer) return refuse(401, 'signed_out');
+  const state = await stateFromHeaders(request.headers);
+  if (!state) return refuse(401, 'signed_out');
+  if (state.mustChangePassword) return refuse(403, 'must_change_password');
+  const { viewer } = state;
 
   // A body sent in chunks has no length to check up front; it is counted as it arrives instead.
   const declared = declaredLength(request);

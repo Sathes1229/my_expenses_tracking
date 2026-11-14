@@ -1,7 +1,10 @@
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import sharp from 'sharp';
+import { eq } from 'drizzle-orm';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { db } from '@/db/client';
+import { receiptUploads, user } from '@/db/schema';
 import { createAccount } from '@/lib/auth/accounts';
 import type { Viewer } from '@/lib/auth/viewer';
 import { env } from '@/lib/env';
@@ -263,6 +266,15 @@ describe('POST /api/receipts', () => {
     expect(lying.seen.cancelled).toBe(true);
   });
 
+  it('refuses someone who must first replace a temporary password (403), and stores nothing', async () => {
+    const headers = await sessionHeaders('siti', 'password1');
+    db.update(user).set({ mustChangePassword: true }).where(eq(user.id, member.id)).run();
+    const res = await POST(await upload(headers, pngWithAlpha, 'image/png'));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe('Choose a new password first, then scan the receipt.');
+    expect(db.select().from(receiptUploads).all()).toHaveLength(0);
+  });
+
   it('stores the photo and returns no draft while no receipt model is set', async () => {
     const res = await POST(await upload(await sessionHeaders('siti', 'password1'), pngWithAlpha, 'image/png'));
     expect(res.status).toBe(200);
@@ -287,5 +299,13 @@ describe('GET /api/receipts/[id]', () => {
     expect((await image(await sessionHeaders('ali', 'password1'), uploadId)).status).toBe(404);
     expect((await image(await sessionHeaders('ali', 'password1'), crypto.randomUUID())).status).toBe(404);
     expect((await image(new Headers(), uploadId)).status).toBe(401);
+  });
+
+  it('sends nothing (404) to someone who must first replace a temporary password', async () => {
+    const { uploadId } = await saveReceiptImage(member, { bytes: pngWithAlpha, mime: 'image/png' });
+    const headers = await sessionHeaders('siti', 'password1');
+    expect((await image(headers, uploadId)).status).toBe(200);
+    db.update(user).set({ mustChangePassword: true }).where(eq(user.id, member.id)).run();
+    expect((await image(headers, uploadId)).status).toBe(404);
   });
 });

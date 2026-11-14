@@ -4,7 +4,7 @@ import { MockLanguageModelV4 } from 'ai/test';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@/db/client';
-import { aiUsage, chatMessages } from '@/db/schema';
+import { aiUsage, chatMessages, user } from '@/db/schema';
 import { createAccount } from '@/lib/auth/accounts';
 import type { Viewer } from '@/lib/auth/viewer';
 import { getAiBudgetStatus, recordChatUsage } from '@/lib/ai/budget';
@@ -170,6 +170,17 @@ describe('POST /api/chat, refusals', () => {
     expect((await (await POST(ask(session, { message: '' }))).json()).error).toBe('invalid_message');
     expect((await (await POST(ask(session, { message: '' }, { sized: false }))).json()).error).toBe('invalid_message');
     expect(languageModel).not.toHaveBeenCalled();
+  });
+
+  it('refuses someone who must first replace a temporary password (403), as the pages do', async () => {
+    await setChatModel(owner, chatModel);
+    const session = await sessionHeaders('siti', 'password1');
+    db.update(user).set({ mustChangePassword: true }).where(eq(user.id, member.id)).run();
+    const res = await POST(ask(session, { message: 'How am I doing?' }));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'must_change_password' });
+    expect(languageModel).not.toHaveBeenCalled();
+    expect(usageRows()).toHaveLength(0);
   });
 
   it('answers 409 not_configured while no chat model is chosen, and saves nothing', async () => {

@@ -11,7 +11,11 @@ export type Role = 'owner' | 'member' | 'guest';
 export type Viewer = { id: string; role: Role; displayName: string };
 export type SessionState = { viewer: Viewer; mustChangePassword: boolean; sessionId: string };
 
-async function stateFromHeaders(requestHeaders: Headers): Promise<SessionState | null> {
+/**
+ * The session a request's cookie belongs to; null when signed out or removed. Route handlers use it
+ * to refuse someone on a temporary password, whom pages send to /change-password first.
+ */
+export async function stateFromHeaders(requestHeaders: Headers): Promise<SessionState | null> {
   const found = await getAuth().api.getSession({
     headers: requestHeaders,
     query: { disableCookieCache: true },
@@ -37,7 +41,10 @@ async function stateFromHeaders(requestHeaders: Headers): Promise<SessionState |
   };
 }
 
-/** The person a request's session cookie belongs to; null when signed out or removed. */
+/**
+ * The person a request's session cookie belongs to; null when signed out or removed. It does not
+ * look at a temporary password, so route handlers use stateFromHeaders instead.
+ */
 export async function viewerFromHeaders(requestHeaders: Headers): Promise<Viewer | null> {
   return (await stateFromHeaders(requestHeaders))?.viewer ?? null;
 }
