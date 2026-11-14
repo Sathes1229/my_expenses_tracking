@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { POST } from '@/app/api/auth/[...all]/route';
 import { db } from '@/db/client';
-import { user } from '@/db/schema';
+import { loginAttempts, user } from '@/db/schema';
 import {
   createAccount,
   hasAnyUser,
@@ -142,6 +142,13 @@ describe('signIn', () => {
     if (result.ok) throw new Error('unreachable');
     expect(result.retryAfterSec).toBeGreaterThan(0);
     expect(result.retryAfterSec).toBeLessThanOrEqual(15 * 60);
+  });
+
+  it('refuses a username that breaks the format the same way, without writing a throttle row', async () => {
+    for (const username of ['x'.repeat(10_000), 'siti; drop', 'ab', 'Ṣiti']) {
+      expect(await signIn(username, 'password1', '1.1.1.1')).toEqual({ ok: false, reason: 'invalid' });
+    }
+    expect(db.select().from(loginAttempts).all()).toHaveLength(0);
   });
 
   it('refuses a removed person', async () => {

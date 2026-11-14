@@ -113,6 +113,9 @@ export type SignInResult =
  * username, wrong password and removed person all look alike.
  */
 export async function signIn(username: string, password: string, ip: string): Promise<SignInResult> {
+  // No account can have such a name, and the throttle stores the name as typed: turned away first,
+  // with the same answer as any other failure.
+  if (usernameError(username)) return { ok: false, reason: 'invalid' };
   const attempt = await beginLoginAttempt(username, ip);
   if (!attempt.allowed) return { ok: false, reason: 'locked', retryAfterSec: attempt.retryAfterSec };
 
