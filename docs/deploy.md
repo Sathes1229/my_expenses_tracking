@@ -168,10 +168,11 @@ minutes.
 
 ### Receipt uploads
 
-The app refuses a receipt upload that has no `Content-Length` header (it answers
-`411 Length Required`), because it checks the size before reading the photo. Browsers always send
-it, and Caddy passes it on unchanged by default. If you use a different proxy, check that it does
-not resend uploads in chunks without a length.
+The app takes receipt photos of up to 15 MB. Browsers send the size of an upload in a
+`Content-Length` header, and Caddy passes it on unchanged by default, so a photo that is too big is
+refused (`413 Content Too Large`) before it is read. A proxy that resends uploads in chunks without
+a length works too: the app counts the upload as it arrives and refuses it with the same `413` once
+it passes the limit.
 
 ### Access logs
 

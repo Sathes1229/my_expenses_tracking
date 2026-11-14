@@ -8,7 +8,7 @@ import { env } from '@/lib/env';
 import { ValidationError } from '@/lib/errors';
 import { fromLocalDateTime } from '@/lib/time';
 import { createTransaction, deleteTransaction, type TransactionInput } from '@/lib/transactions';
-import { readReceiptImage, saveReceiptImage } from '@/lib/uploads';
+import { MAX_RECEIPT_BYTES, readReceiptImage, saveReceiptImage } from '@/lib/uploads';
 import { POST } from '@/app/api/receipts/route';
 import { GET } from '@/app/api/receipts/[id]/route';
 import { resetDb } from './helpers/db';
@@ -140,6 +140,12 @@ function headersFor(session: Headers, origin: string | null, host: string): Head
   return h;
 }
 
+function photoForm(bytes: Buffer, type: string): FormData {
+  const form = new FormData();
+  form.append('image', new File([new Uint8Array(bytes)], 'receipt', { type }));
+  return form;
+}
+
 /** A multipart upload as a browser sends it: the body serialised, with its Content-Length. */
 async function upload(
   session: Headers,
@@ -148,9 +154,7 @@ async function upload(
   origin: string | null = APP,
   host = 'localhost:3100',
 ): Promise<Request> {
-  const form = new FormData();
-  form.append('image', new File([new Uint8Array(bytes)], 'receipt', { type }));
-  const encoded = new Response(form);
+  const encoded = new Response(photoForm(bytes, type));
   const body = new Uint8Array(await encoded.arrayBuffer());
   const h = headersFor(session, origin, host);
   h.set('content-type', encoded.headers.get('content-type')!);
@@ -213,21 +217,41 @@ describe('POST /api/receipts', () => {
     expect((await big.json()).error).toMatch(/15 MB/);
   });
 
-  it('refuses a body with no size (411), and one declared over the limit before reading it (413)', async () => {
+  it('accepts a photo sent in chunks with no size, as a proxy may resend it', async () => {
+    const encoded = new Response(photoForm(pngWithAlpha, 'image/png'));
+    const bytes = new Uint8Array(await encoded.arrayBuffer());
+    const chunks = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let at = 0; at < bytes.byteLength; at += 16 * 1024) controller.enqueue(bytes.subarray(at, at + 16 * 1024));
+        controller.close();
+      },
+    });
+    const req = streamed(await sessionHeaders('siti', 'password1'), chunks);
+    req.headers.set('content-type', encoded.headers.get('content-type')!);
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ uploadId: expect.any(String), draft: null, reason: 'not_configured' });
+    expect(await readReceiptImage(member, body.uploadId)).not.toBeNull();
+  });
+
+  it('counts a body with no size as it arrives (413 past the limit), and refuses one declared over it before reading (413)', async () => {
     const headers = await sessionHeaders('owner', 'password1');
-    const unsized = endless();
-    const noLength = await POST(streamed(headers, unsized.stream));
-    expect(noLength.status).toBe(411);
-    expect(unsized.seen.bytes).toBe(0);
+    for (const length of [undefined, Number.NaN]) {
+      const unsized = endless();
+      const res = await POST(streamed(headers, unsized.stream, length));
+      expect(res.status).toBe(413);
+      expect((await res.json()).error).toMatch(/15 MB/);
+      expect(unsized.seen.bytes).toBeGreaterThan(MAX_RECEIPT_BYTES);
+      expect(unsized.seen.bytes).toBeLessThan(MAX_RECEIPT_BYTES + 1024 * 1024); // stopped at the limit
+      expect(unsized.seen.cancelled).toBe(true);
+    }
 
     const huge = endless();
     const declaredHuge = await POST(streamed(headers, huge.stream, 20 * 1024 * 1024));
     expect(declaredHuge.status).toBe(413);
     expect((await declaredHuge.json()).error).toMatch(/15 MB/);
     expect(huge.seen.bytes).toBe(0);
-
-    const nonsense = endless();
-    expect((await POST(streamed(headers, nonsense.stream, Number.NaN))).status).toBe(411);
   });
 
   it('stops reading a body that runs past the size it declared (413), without buffering it all', async () => {

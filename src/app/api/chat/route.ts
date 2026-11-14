@@ -16,12 +16,12 @@ export async function POST(request: Request): Promise<Response> {
   const viewer = await viewerFromHeaders(request.headers);
   if (!viewer) return refuse(401, 'signed_out');
 
+  // A body sent in chunks has no length to check up front; it is counted as it arrives instead.
   const declared = declaredLength(request);
-  if (declared === null) return refuse(411, 'length_required');
-  if (declared > MAX_BODY_BYTES) return refuse(413, 'too_large');
+  if (declared !== null && declared > MAX_BODY_BYTES) return refuse(413, 'too_large');
   if (!request.body) return refuse(400, 'invalid_message');
 
-  const counted = countBytes(request.body, declared);
+  const counted = countBytes(request.body, declared ?? MAX_BODY_BYTES);
   let parsed: unknown;
   try {
     parsed = JSON.parse(await new Response(counted.body).text());

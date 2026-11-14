@@ -20,14 +20,12 @@ export async function POST(request: Request): Promise<Response> {
   if (!viewer) return refuse(401, 'You are signed out. Sign in again, then scan the receipt.');
 
   const declared = declaredLength(request);
-  if (declared === null) {
-    return refuse(411, 'The upload did not say how big it is, so it was not accepted. Try again from the scan page.');
-  }
-  // Turned away before the body is read when the request says up front that it is too big.
-  if (declared > MAX_BODY_BYTES) return refuse(413, RECEIPT_TOO_LARGE);
+  // Turned away before the body is read when the request says up front that it is too big. A body
+  // sent in chunks, with no length (some proxies resend uploads that way), is counted as it arrives.
+  if (declared !== null && declared > MAX_BODY_BYTES) return refuse(413, RECEIPT_TOO_LARGE);
   if (!request.body) return refuse(400, NO_PHOTO);
 
-  const counted = countBytes(request.body, declared);
+  const counted = countBytes(request.body, declared ?? MAX_BODY_BYTES);
   let image: FormDataEntryValue | null;
   try {
     const multipart = new Response(counted.body, { headers: { 'content-type': request.headers.get('content-type') ?? '' } });

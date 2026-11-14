@@ -84,19 +84,30 @@ function keyRefused() {
   });
 }
 
-/** A JSON body as the assistant page sends it, with its Content-Length. A string is sent as it is. */
+/**
+ * A JSON body as the assistant page sends it, with its Content-Length. A string is sent as it is.
+ * Unsized, it is sent in chunks with no length, as a proxy may resend it.
+ */
 function ask(
   session: Headers,
   body: unknown,
   { origin = APP, sized = true, signal }: { origin?: string | null; sized?: boolean; signal?: AbortSignal } = {},
 ) {
   const text = typeof body === 'string' ? body : JSON.stringify(body);
+  const bytes = new TextEncoder().encode(text);
   const h = new Headers(session);
   h.set('host', 'localhost:3100');
   h.set('content-type', 'application/json');
-  if (sized) h.set('content-length', String(new TextEncoder().encode(text).byteLength));
+  if (sized) h.set('content-length', String(bytes.byteLength));
   if (origin) h.set('origin', origin);
-  return new Request(`${APP}/api/chat`, { method: 'POST', headers: h, body: text, signal });
+  if (sized) return new Request(`${APP}/api/chat`, { method: 'POST', headers: h, body: text, signal });
+  const chunks = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (let at = 0; at < bytes.byteLength; at += 1024) controller.enqueue(bytes.subarray(at, at + 1024));
+      controller.close();
+    },
+  });
+  return new Request(`${APP}/api/chat`, { method: 'POST', headers: h, body: chunks, signal, duplex: 'half' } as RequestInit);
 }
 
 /** Makes the route's 120 s answer timeout fire after `ms` instead, for the duration of a test. */
@@ -143,18 +154,21 @@ describe('POST /api/chat, refusals', () => {
     expect(languageModel).not.toHaveBeenCalled();
   });
 
-  it('needs a size (411), caps the body (413) and wants a message of 1 to 2000 characters (400)', async () => {
+  it('caps the body (413), with or without a size, and wants a message of 1 to 2000 characters (400)', async () => {
     await setChatModel(owner, chatModel);
     const session = await sessionHeaders('siti', 'password1');
 
-    expect((await POST(ask(session, { message: 'Hi' }, { sized: false }))).status).toBe(411);
     expect((await POST(ask(session, { message: 'x'.repeat(17 * 1024) }))).status).toBe(413);
+    const unsized = await POST(ask(session, { message: 'x'.repeat(17 * 1024) }, { sized: false }));
+    expect(unsized.status).toBe(413);
+    expect(await unsized.json()).toEqual({ error: 'too_large' });
 
     for (const bad of [{ message: '   ' }, { message: 'x'.repeat(2001) }, { message: 42 }, {}, 'not json', [1]]) {
       const res = await POST(ask(session, bad));
       expect(res.status).toBe(400);
     }
     expect((await (await POST(ask(session, { message: '' }))).json()).error).toBe('invalid_message');
+    expect((await (await POST(ask(session, { message: '' }, { sized: false }))).json()).error).toBe('invalid_message');
     expect(languageModel).not.toHaveBeenCalled();
   });
 
@@ -209,6 +223,14 @@ describe('POST /api/chat, answers', () => {
       }),
     ]);
     expect(languageModel).toHaveBeenCalledWith(chatModel);
+  });
+
+  it('answers a question sent in chunks with no size, as a proxy may resend it', async () => {
+    vi.mocked(languageModel).mockReturnValue(answering(['Fine.']));
+    const res = await POST(ask(await sessionHeaders('siti', 'password1'), { message: 'How am I doing?' }, { sized: false }));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('Fine.');
+    expect(messagesOf(member.id).map((m) => m.content)).toEqual(['How am I doing?', 'Fine.']);
   });
 
   it('sends the rules, the viewer’s own context and a capped answer length', async () => {
