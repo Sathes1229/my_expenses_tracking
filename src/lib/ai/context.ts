@@ -17,7 +17,8 @@ const STATE_WORDS: Record<BudgetSummary['state'], string> = {
 };
 
 // Names people typed (budgets, shops, debtors) are quoted so the model can see where the data ends.
-const quote = (name: string) => JSON.stringify(name);
+// < and > are written as JSON escapes, so no name can close the </household-data> block around it.
+const quote = (name: string) => JSON.stringify(name).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e');
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const WHO: Record<Viewer['role'], string> = {
