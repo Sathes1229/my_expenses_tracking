@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAccount } from '@/lib/auth/accounts';
 import type { Viewer } from '@/lib/auth/viewer';
 import { buildAssistantContext } from '@/lib/ai/context';
-import { createBudget } from '@/lib/budgets';
+import { archiveBudget, createBudget } from '@/lib/budgets';
 import { addPayment, createDebt } from '@/lib/debts';
 import { fromLocalDateTime } from '@/lib/time';
 import { createTransaction, type PaymentMethod } from '@/lib/transactions';
@@ -11,6 +11,7 @@ import { resetDb } from '../helpers/db';
 let owner: Viewer;
 let member: Viewer;
 let guest: Viewer;
+let dining: string;
 
 async function person(username: string, displayName: string, role: Viewer['role']): Promise<Viewer> {
   const a = await createAccount({ username, displayName, password: 'password1', role });
@@ -44,7 +45,7 @@ beforeEach(async () => {
   member = await person('siti', 'Siti', 'member');
   guest = await person('mei', 'Mei', 'guest');
   const groceries = (await createBudget(owner, { name: 'Groceries', allocationSen: 80000 })).id;
-  const dining = (await createBudget(owner, { name: 'Dining', allocationSen: 20000 })).id;
+  dining = (await createBudget(owner, { name: 'Dining', allocationSen: 20000 })).id;
   await spend(member, 'Tesco', 4000, groceries, '2026-11-03', {
     paymentMethod: 'card',
     note: 'birthday surprise',
@@ -104,6 +105,17 @@ describe('buildAssistantContext', () => {
       expect(text).not.toContain('Siti');
       expect(text).not.toContain('Mei');
     }
+  });
+
+  it('keeps an archived budget apart from a new budget with the same name, marked archived', async () => {
+    await archiveBudget(owner, dining);
+    const newDining = (await createBudget(owner, { name: 'Dining', allocationSen: 25000 })).id;
+    await spend(member, 'Nasi lemak', 1200, newDining, '2026-11-06');
+    const m = await buildAssistantContext(member);
+    expect(m).toContain(
+      '- November 2026: "Groceries" RM 40.00, "Dining" (archived) RM 15.00, "Dining" RM 12.00, "Uncategorised" RM 5.00',
+    );
+    expect(m).toContain('- September 2026: "Dining" (archived) RM 8.00');
   });
 
   it('stays compact', async () => {

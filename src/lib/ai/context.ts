@@ -39,8 +39,12 @@ function left(remainingSen: number): string {
 }
 
 /** Sums by a key, largest first, keeping the first spelling seen as the label. */
-function totalsBy(rows: TransactionRow[], key: (row: TransactionRow) => string, label: (row: TransactionRow) => string) {
-  const groups = new Map<string, { label: string; totalSen: number; count: number }>();
+function totalsBy(
+  rows: TransactionRow[],
+  key: (row: TransactionRow) => string | null,
+  label: (row: TransactionRow) => string,
+) {
+  const groups = new Map<string | null, { label: string; totalSen: number; count: number }>();
   for (const row of rows) {
     const group = groups.get(key(row)) ?? { label: label(row), totalSen: 0, count: 0 };
     group.totalSen += row.totalSen;
@@ -67,10 +71,14 @@ function householdLines(budgets: BudgetSummary[], months: string[], rowsByMonth:
     lines.push(`Altogether this month: ${formatRM(spent)} spent of ${formatRM(allocated)} budgeted.`);
   }
 
+  // Grouped by id, not name, as on the dashboard: an archived budget and a new one may share a name.
+  const active = new Set(budgets.map((b) => b.id));
+  const budgetLabel = (row: TransactionRow) =>
+    row.budgetId !== null && !active.has(row.budgetId) ? `${quote(row.budgetName)} (archived)` : quote(row.budgetName);
   lines.push('', 'Spending by budget:');
   months.forEach((m, i) => {
-    const byBudget = totalsBy(rowsByMonth[i], (row) => row.budgetName, (row) => row.budgetName);
-    const text = byBudget.map((g) => `${quote(g.label)} ${formatRM(g.totalSen)}`).join(', ');
+    const byBudget = totalsBy(rowsByMonth[i], (row) => row.budgetId, budgetLabel);
+    const text = byBudget.map((g) => `${g.label} ${formatRM(g.totalSen)}`).join(', ');
     lines.push(`- ${monthLabel(m)}: ${text || 'nothing spent'}`);
   });
 
