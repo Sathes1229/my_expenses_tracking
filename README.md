@@ -7,6 +7,49 @@ Everything below happens in PowerShell, opened in the project folder (the folder
 file). To open it there: in File Explorer, open the folder, click the address bar, type
 `powershell` and press Enter.
 
+## First-time setup on a new PC
+
+Do this once, on a PC that has never run the app.
+
+1. Install Node.js: download the LTS version from https://nodejs.org and run the installer with
+   its default choices. Then close PowerShell and open it again in the project folder.
+2. Install what the app needs:
+
+   ```powershell
+   npm install
+   ```
+
+3. Make your own settings file from the example:
+
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+
+4. Open `.env` in Notepad and fill in two lines:
+   - `APP_URL=`: the address everyone will open, for example `http://192.168.1.10:3100`.
+     [Open it on phones and other devices](#open-it-on-phones-and-other-devices) shows how to
+     find this PC's address.
+   - `BETTER_AUTH_SECRET=`: a long random value that keeps sign-ins safe. This command makes one.
+     Paste what it prints right after the `=`:
+
+     ```powershell
+     node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+     ```
+
+   Save the file.
+5. Build the app, then start it:
+
+   ```powershell
+   npm run build
+   npm start
+   ```
+
+6. Open the `APP_URL` address in a browser on this PC. The first visit asks you to create the
+   owner account, which is yours.
+
+So that phones can reach the app too, also do [Let other devices in](#let-other-devices-in-once)
+once.
+
 ## Start and stop it
 
 To start the app:
@@ -39,8 +82,9 @@ http://<this PC's IP address>:3100
 
 for example `http://192.168.1.10:3100`.
 
-To find this PC's IP address, run `ipconfig` in PowerShell. Under **Wireless LAN adapter Wi-Fi**,
-the number after **IPv4 Address** is the one you need.
+To find this PC's IP address, run `ipconfig` in PowerShell. Under **Wireless LAN adapter Wi-Fi**
+(or **Ethernet adapter Ethernet** if the PC is plugged in with a cable), the number after
+**IPv4 Address** is the one you need.
 
 The `APP_URL` line in the `.env` file must be that same address, for example:
 
