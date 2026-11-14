@@ -1,14 +1,19 @@
 # syntax=docker/dockerfile:1
 
 # Node 26 is the current LTS line. The Debian slim image is published for linux/amd64 and
-# linux/arm64, and better-sqlite3 and sharp ship prebuilt native files for both.
+# linux/arm64. better-sqlite3 ships prebuilds/linux-{x64,arm64}.node and sharp loads its binary from
+# the @img/sharp-linux-* packages, so the image needs no compiler or Python.
 FROM node:26-trixie-slim AS base
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN npm ci
+# --ignore-scripts: better-sqlite3 has no install script, but npm still runs node-gyp because it
+# ships a binding.gyp, and that fails without Python. The only locked packages with install scripts
+# are esbuild (a dev tool for tsx, drizzle-kit and vitest) and fsevents (macOS only); next build
+# and the running app need neither.
+RUN npm ci --ignore-scripts
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
