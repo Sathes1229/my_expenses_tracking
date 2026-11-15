@@ -9,7 +9,7 @@ import { Meter } from '@/components/meter';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
 import { StateTag } from '@/components/state-tag';
-import { requireViewer, type Viewer } from '@/lib/auth/viewer';
+import { requireViewer } from '@/lib/auth/viewer';
 import type { BudgetSummary } from '@/lib/budgets';
 import { getDashboard, type Dashboard } from '@/lib/dashboard';
 import { monthKey, monthLabel, parseMonthParam, shiftMonth } from '@/lib/time';
@@ -47,6 +47,7 @@ async function Home({ searchParams }: Pick<PageProps<'/'>, 'searchParams'>) {
   const month = asked > thisMonth ? thisMonth : asked;
   const data = await getDashboard(viewer, month);
   const isOwner = viewer.role === 'owner';
+  const isGuest = viewer.role === 'guest';
   const hasBudgets = data.budgets.length > 0;
 
   return (
@@ -70,11 +71,13 @@ async function Home({ searchParams }: Pick<PageProps<'/'>, 'searchParams'>) {
       {/* Wide screens: the budget picture on the left, activity beside it. Phones: one column, in that order. */}
       <div className="mt-8 grid grid-cols-1 gap-x-12 gap-y-12 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0">
-          {!hasBudgets ? (
-            <NoBudgets isOwner={isOwner} />
-          ) : (
-            data.totals && <LeftThisMonth totals={data.totals} month={month} isCurrent={month === thisMonth} />
-          )}
+          {/* A guest gets no budgets from the server, so nothing about them shows here. */}
+          {!isGuest &&
+            (!hasBudgets ? (
+              <NoBudgets isOwner={isOwner} />
+            ) : (
+              data.totals && <LeftThisMonth totals={data.totals} month={month} isCurrent={month === thisMonth} />
+            ))}
           {/* First in the column for a guest, who has no total above it. */}
           <div className="mt-6 flex flex-wrap gap-3 first:mt-0">
             <ButtonLink href="/transactions/scan" variant={isOwner && !hasBudgets ? 'secondary' : 'primary'} className="gap-2">
@@ -86,11 +89,11 @@ async function Home({ searchParams }: Pick<PageProps<'/'>, 'searchParams'>) {
             </ButtonLink>
           </div>
           <NeedsAttention budgets={data.budgets} />
-          {hasBudgets && <Budgets budgets={data.budgets} role={viewer.role} />}
+          {hasBudgets && <Budgets budgets={data.budgets} />}
           {data.byBudget && data.byBudget.length > 0 && <SpendingByBudget rows={data.byBudget} />}
         </div>
         <div className="min-w-0">
-          <Recent data={data} isGuest={viewer.role === 'guest'} />
+          <Recent data={data} isGuest={isGuest} />
           {data.debts && <OwedToYou debts={data.debts} />}
         </div>
       </div>
@@ -164,17 +167,12 @@ function NeedsAttention({ budgets }: { budgets: BudgetSummary[] }) {
   );
 }
 
-/**
- * Each budget's state and what is left. Owners and members also get the meter and the amounts; a
- * guest's list has neither (the server never sent them), so for a guest it is the page's focal point
- * and the amounts left are set larger.
- */
-function Budgets({ budgets, role }: { budgets: BudgetSummary[]; role: Viewer['role'] }) {
-  const isGuest = role === 'guest';
+/** Each budget's state, what is left, the meter and the amounts. Owners and members only. */
+function Budgets({ budgets }: { budgets: BudgetSummary[] }) {
   return (
     <section aria-labelledby="budgets-heading" className="mt-10">
       <h2 id="budgets-heading" className="text-lg font-semibold text-ink">
-        {isGuest ? 'Left in each budget' : 'Budgets'}
+        Budgets
       </h2>
       <ul className="mt-3 divide-y divide-line rounded-surface border border-line bg-surface">
         {budgets.map((b) => (
@@ -182,24 +180,20 @@ function Budgets({ budgets, role }: { budgets: BudgetSummary[]; role: Viewer['ro
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <h3 className="min-w-0 font-semibold break-words text-ink">{b.name}</h3>
               <p className="text-ink">
-                <Money sen={Math.abs(b.remainingSen)} className={cx('font-semibold', isGuest ? 'text-3xl' : 'text-lg')} />
+                <Money sen={Math.abs(b.remainingSen)} className="text-lg font-semibold" />
                 <span className="text-muted">{b.remainingSen < 0 ? ' over' : ' left'}</span>
               </p>
             </div>
             <div className="mt-1">
               <StateTag state={b.state} />
             </div>
-            {b.allocationSen !== undefined && b.spentSen !== undefined && (
-              <>
-                {/* No label: the same amounts are written just below, so the meter is hidden from screen readers. */}
-                <div className="mt-2">
-                  <Meter value={b.spentSen} max={b.allocationSen} state={b.state} threshold={b.thresholdPct} />
-                </div>
-                <p className="mt-1 text-sm text-muted">
-                  <Money sen={b.spentSen} /> spent of <Money sen={b.allocationSen} />
-                </p>
-              </>
-            )}
+            {/* No label: the same amounts are written just below, so the meter is hidden from screen readers. */}
+            <div className="mt-2">
+              <Meter value={b.spentSen} max={b.allocationSen} state={b.state} threshold={b.thresholdPct} />
+            </div>
+            <p className="mt-1 text-sm text-muted">
+              <Money sen={b.spentSen} /> spent of <Money sen={b.allocationSen} />
+            </p>
           </li>
         ))}
       </ul>

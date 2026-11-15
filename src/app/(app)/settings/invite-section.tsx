@@ -135,7 +135,7 @@ function CreateInvite() {
             <RoleChoice
               value="guest"
               title="Guest"
-              detail="For friends. Sees budget names, what is left and their own entries."
+              detail="For friends. Sees budget names and their own entries."
               defaultChecked={state.role === 'guest'}
             />
           </div>

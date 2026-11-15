@@ -66,7 +66,8 @@ async function SignedInShell({ children }: { children: ReactNode }) {
           </div>
           <div className="flex flex-wrap items-center gap-x-1">
             <MainNav items={items} variant="top" />
-            <NotificationBell unread={unread} />
+            {/* Guests get no budget alerts, so no bell. */}
+            {viewer.role !== 'guest' && <NotificationBell unread={unread} />}
             <ThemeToggle />
             <form action={signOut}>
               <SubmitButton variant="quiet" className="whitespace-nowrap">Sign out</SubmitButton>

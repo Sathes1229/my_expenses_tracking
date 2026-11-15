@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { requireViewer } from '@/lib/auth/viewer';
-import { listBudgetSummaries } from '@/lib/budgets';
+import { listBudgetNames, listBudgetSummaries } from '@/lib/budgets';
 import { monthLabel, parseMonthParam } from '@/lib/time';
 import { AddBudget } from './budget-forms';
 import { BudgetList } from './budget-list';
@@ -35,6 +35,7 @@ export default function BudgetsPage({ searchParams }: PageProps<'/budgets'>) {
 // Every page checks the session itself: the layout does not re-run on client navigation.
 async function Budgets({ searchParams }: Pick<PageProps<'/budgets'>, 'searchParams'>) {
   const viewer = await requireViewer();
+  if (viewer.role === 'guest') return <GuestBudgets names={await listBudgetNames(viewer)} />;
   const raw = (await searchParams).month;
   const month = parseMonthParam(typeof raw === 'string' ? raw : undefined);
   const budgets = await listBudgetSummaries(viewer, month);
@@ -51,6 +52,29 @@ async function Budgets({ searchParams }: Pick<PageProps<'/budgets'>, 'searchPara
           </EmptyState>
         ) : (
           <BudgetList budgets={budgets} role={viewer.role} />
+        )}
+      </div>
+    </>
+  );
+}
+
+/** A guest sees the names only: the budgets they can pick when they add an expense. */
+function GuestBudgets({ names }: { names: { id: string; name: string }[] }) {
+  return (
+    <>
+      <PageHeader title="Budgets" />
+      <p className="mt-1 text-muted">Pick one of these when you add an expense.</p>
+      <div className="mt-6">
+        {names.length === 0 ? (
+          <EmptyState title="No budgets have been set up yet." />
+        ) : (
+          <ul className="divide-y divide-line rounded-surface border border-line bg-surface">
+            {names.map((b) => (
+              <li key={b.id} className="px-4 py-4 font-semibold break-words text-ink">
+                {b.name}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </>

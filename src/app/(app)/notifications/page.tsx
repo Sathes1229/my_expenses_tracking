@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -33,6 +34,8 @@ export default function NotificationsPage() {
 // Every page checks the session itself: the layout does not re-run on client navigation.
 async function Notifications() {
   const viewer = await requireViewer();
+  // Budget alerts tell a budget's state, which guests do not see.
+  if (viewer.role === 'guest') notFound();
   const items = await listNotifications(viewer);
   return (
     <>

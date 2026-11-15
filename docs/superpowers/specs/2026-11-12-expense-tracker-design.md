@@ -57,17 +57,18 @@ The owner will not read or change the code. Every decision in the code has to be
 
 Login is by **username + password** (the owner said each person has their own username). No email address is required.
 
-Three roles. **Owner** is the one person who set the app up. **Member** is for family. **Guest** is for friends (owner's decision: guests see budget names and what is left, plus their own entries, and nothing of other people's spending).
+Three roles. **Owner** is the one person who set the app up. **Member** is for family. **Guest** is for friends (owner's decision: guests see budget names and their own entries, and nothing of other people's spending; changed on 2026-11-15, see `2026-11-15-guest-budget-names-only-design.md`).
 
 | Capability | Owner | Member | Guest |
 |---|---|---|---|
-| See each budget's name, remaining amount and state (fine / past threshold / over) | yes | yes | yes |
+| See each budget's name | yes | yes | yes |
+| See each budget's remaining amount and state (fine / past threshold / over) | yes | yes | no (since 2026-11-15) |
 | See each budget's allocation and amount spent | yes | yes | no |
 | See household totals, charts, other people's transactions | yes | yes | no |
 | Add transactions (receipt or manual); they count against the household budgets | yes | yes | yes |
 | See, edit, delete transactions | any | see all, edit/delete only their own | only their own |
 | Create / edit / delete budgets | yes | no | no |
-| Budget threshold notifications | yes | yes (my call) | yes (my call: it is the same information as "remaining") |
+| Budget threshold notifications | yes | yes (my call) | no (since 2026-11-15: an alert tells a budget's state) |
 | Debts (money lent) | yes | no, private to owner (my call) | no |
 | AI assistant | yes | yes | yes, but it only knows what the guest can see |
 | Settings: invites, people, AI provider, AI budget | yes | no | no |
@@ -95,7 +96,7 @@ For owner and members, for the current month:
 - Access to the AI assistant.
 - Month switcher to look at previous months.
 
-For guests: each budget's name, remaining amount and state; their own recent transactions; the same two primary actions; the assistant.
+For guests: their own recent transactions, the same two primary actions and the assistant; no budget figures (since 2026-11-15).
 
 ### 5.2 Transactions
 
@@ -137,7 +138,7 @@ Budgets repeat every month automatically with the same allocation. Changing an a
 - Triggered when a saved or edited transaction pushes a budget's month-to-date spending past its threshold, and again when it passes 100%.
 - Each budget notifies at most once per level per month (no repeats for every later transaction).
 - Shown as an unread badge on a bell, a notification list, and a banner on the dashboard while the budget is over threshold.
-- Wording for guests must not reveal amounts they cannot otherwise see (state and remaining only).
+- Guests get no budget notifications (since 2026-11-15).
 - In-app only in v1.
 
 ### 5.5 Debts (owner only)
@@ -153,7 +154,7 @@ Budgets repeat every month automatically with the same allocation. Changing an a
 - A chat page. The user asks questions in their own words (English or Malay; the assistant answers in the language used).
 - Each request includes a compact summary for context, limited to what that user may see:
   - Owner and members: budgets and allocations, spending per category for the last 3 months, top merchants, payment method split. Owner only: debt totals.
-  - Guests: budget names with remaining amount and state, and the guest's own transactions.
+  - Guests: budget names and the guest's own transactions (since 2026-11-15).
   - Never raw receipt images.
 - The assistant gives advice on spending and budgets. It must not present itself as a licensed financial advisor.
 - Chat history is saved per user and private to that user.

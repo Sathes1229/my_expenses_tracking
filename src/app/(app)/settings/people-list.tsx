@@ -48,8 +48,7 @@ export function PeopleList({ people }: { people: Person[] }) {
         People
       </h2>
       <p className="mt-1 text-muted">
-        Members see all household spending. Guests see budget names and what is left, plus only their own
-        entries.
+        Members see all household spending. Guests see budget names and only their own entries.
       </p>
       <p ref={noticeRef} tabIndex={-1} role="status" className="mt-3 min-h-6 text-sm font-medium text-ink">
         {notice?.text}

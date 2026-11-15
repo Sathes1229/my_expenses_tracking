@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 
 const WHAT_YOU_SEE = {
   member: "As a member you see the household budgets and everyone's spending, and add your own.",
-  guest: 'As a guest you see what is left in each budget and the entries you add yourself.',
+  guest: 'As a guest you see the budget names and the entries you add yourself.',
 } as const;
 
 const PROBLEMS: Record<Exclude<InviteStatus, 'valid'>, { title: string; detail: string; signIn?: boolean }> = {
