@@ -41,11 +41,14 @@ export function Chat({
   availability,
   isOwner,
   maxChars,
+  hint,
 }: {
   initialMessages: ShownMessage[];
   availability: Availability;
   isOwner: boolean;
   maxChars: number;
+  /** A first question the assistant can answer for this person. */
+  hint: string;
 }) {
   const router = useRouter();
   const [messages, setMessages] = useState(initialMessages);
@@ -194,9 +197,7 @@ export function Chat({
 
         {messages.length === 0 && !pending && (
           <div className="mt-3">
-            <EmptyState title="No questions yet.">
-              Try asking which budget is running out fastest this month, or where you could spend less.
-            </EmptyState>
+            <EmptyState title="No questions yet.">{hint}</EmptyState>
           </div>
         )}
 

@@ -76,6 +76,12 @@ async function Assistant() {
         availability={availability}
         isOwner={isOwner}
         maxChars={MESSAGE_MAX_CHARS}
+        hint={
+          // A guest's assistant knows budget names and their own spending, not what is left.
+          viewer.role === 'guest'
+            ? 'Try asking how much you have spent this month, or where you could spend less.'
+            : 'Try asking which budget is running out fastest this month, or where you could spend less.'
+        }
       />
     </>
   );

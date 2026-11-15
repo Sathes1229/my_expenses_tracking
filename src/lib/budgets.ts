@@ -8,10 +8,7 @@ import { monthKey, monthRange } from './time';
 
 export { budgetState, type BudgetState };
 
-/**
- * One budget for one month. Guests get only the first four keys: the three optional ones are
- * left out of the object on the server, not hidden by the page.
- */
+/** One budget for one month, with its amounts. Owners and members only; guests get names (listBudgetNames). */
 export type BudgetSummary = {
   id: string;
   name: string;

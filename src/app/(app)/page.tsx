@@ -139,7 +139,7 @@ function LeftThisMonth({
   );
 }
 
-/** Budgets past their near-limit level or over, worst first. Names and state only, so it reads the same for every role. */
+/** Budgets past their near-limit level or over, worst first. Owners and members only: a guest's dashboard has no budgets. */
 function NeedsAttention({ budgets }: { budgets: BudgetSummary[] }) {
   const over = budgets.filter((b) => b.state === 'over');
   const tight = budgets.filter((b) => b.state === 'tight');
