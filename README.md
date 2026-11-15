@@ -52,7 +52,18 @@ once.
 
 ## Start and stop it
 
-To start the app:
+To start the app, double-click **My Expenses** on your desktop. A window titled My Expenses opens,
+and your browser opens the app once it is ready. If the app is already running, the icon just opens
+it in the browser.
+
+To put the icon on the desktop (on a new PC, or if it was deleted):
+
+1. In the project folder, right-click `start.cmd` and choose **Show more options > Send to >
+   Desktop (create shortcut)**.
+2. Right-click the new shortcut, choose **Properties > Change Icon**, and pick `my-expenses.ico`
+   from the project folder.
+
+You can also start it from PowerShell in the project folder:
 
 ```powershell
 npm start
