@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import { themeScript } from "@/components/theme-script";
 import { ThemeSync } from "@/components/theme-sync";
@@ -14,9 +14,16 @@ const plex = IBM_Plex_Sans({
 export const metadata: Metadata = {
   title: "My Expenses",
   description: "Household expense tracker",
-  // No icon until the owner chooses one (the name stays plain text). An empty data URL says so,
-  // so browsers stop asking for /favicon.ico and logging a 404 on every first visit.
-  icons: { icon: "data:," },
+  // Icons come from icon.png and apple-icon.png in this folder.
+  appleWebApp: { title: "My Expenses", statusBarStyle: "default" },
+};
+
+// The phone's status bar matches the page background. It follows the device theme, not ThemeToggle.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f5f4f0" },
+    { media: "(prefers-color-scheme: dark)", color: "#161513" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

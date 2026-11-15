@@ -124,6 +124,26 @@ The rule only works on a network Windows treats as private. Check that your home
 Private: **Settings > Network & internet > Wi-Fi**, choose your network, and under
 **Network profile type** pick **Private network**.
 
+### Put it on a phone's home screen
+
+On an iPhone connected to your home Wi-Fi:
+
+1. Open **Safari** and go to the app's address, for example `http://192.168.1.10:3100`.
+2. Tap **Share** (the square with an arrow), then **Add to Home Screen**.
+3. If you see **Open as Web App**, leave it on. Tap **Add**.
+
+The My Expenses icon now opens the app full screen, without Safari's bars. Sign in once inside it:
+it keeps its own sign-in, separate from Safari. You stay signed in as long as you open it at least
+once a week.
+
+On Android, open the address in **Chrome**, tap the **⋮** menu and choose **Add to home screen**.
+
+Someone you invite opens their invite link first and sets a password, then adds the icon.
+
+The icon works only on your home Wi-Fi, while the app runs on this PC. It remembers the address it
+was added from: if the PC's IP address changes, delete the icon and add it again from the new
+address. Reserving a fixed address for this PC in your router avoids that.
+
 ## Turn on the AI features
 
 Receipt reading and the assistant need a key from an AI provider. Keys go in the `.env` file:
