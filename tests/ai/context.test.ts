@@ -63,7 +63,7 @@ beforeEach(async () => {
 afterEach(() => vi.useRealTimers());
 
 describe('buildAssistantContext', () => {
-  it("gives a guest budget names, what is left and their own spending, and nobody else's", async () => {
+  it("gives a guest budget names and their own spending, and nobody else's", async () => {
     const g = await buildAssistantContext(guest);
     expect(g).not.toContain('Tesco'); // a member's merchant
     expect(g).not.toMatch(/Ali/); // a debtor
@@ -71,8 +71,9 @@ describe('buildAssistantContext', () => {
     expect(g).not.toContain('Siti');
     expect(g).not.toContain('RM 800.00'); // an allocation
     expect(g).not.toContain('RM 40.00'); // a budget's spending
+    expect(g).not.toContain('RM 760.00'); // what is left in Groceries
+    expect(g).not.toMatch(/\bleft\b|over budget|near its limit|on track/i);
     expect(g).toContain('Groceries');
-    expect(g).toContain('RM 760.00'); // what is left in Groceries
     expect(g).toContain('Mamak Corner');
     expect(g).toContain('Kopitiam'); // their own, two months back
   });

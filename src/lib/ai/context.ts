@@ -1,5 +1,5 @@
 import type { Viewer } from '@/lib/auth/viewer';
-import { listBudgetSummaries, type BudgetSummary } from '@/lib/budgets';
+import { listBudgetNames, listBudgetSummaries, type BudgetSummary } from '@/lib/budgets';
 import { debtTotals } from '@/lib/debts';
 import { formatRM } from '@/lib/money';
 import { dayKey, monthKey, monthLabel, shiftMonth } from '@/lib/time';
@@ -26,7 +26,7 @@ const WHO: Record<Viewer['role'], string> = {
   member:
     'The person asking is a member of the household. They see every budget and all spending, but not money the owner lent.',
   guest:
-    "The person asking is a guest of the household. They see each budget's name, what is left in it and its state, and only their own spending. Nothing else is shared with them, so it is not given here.",
+    'The person asking is a guest of the household. They see the budget names and only their own spending. Nothing else is shared with them, so it is not given here.',
 };
 
 function today(now: Date): string {
@@ -64,7 +64,7 @@ function householdLines(budgets: BudgetSummary[], months: string[], rowsByMonth:
     lines.push(`Budgets for ${monthLabel(month)}:`);
     for (const b of budgets) {
       lines.push(
-        `- ${quote(b.name)}: ${formatRM(b.allocationSen ?? 0)} budgeted, ${formatRM(b.spentSen ?? 0)} spent, ${left(b.remainingSen)}, ${STATE_WORDS[b.state]}`,
+        `- ${quote(b.name)}: ${formatRM(b.allocationSen)} budgeted, ${formatRM(b.spentSen)} spent, ${left(b.remainingSen)}, ${STATE_WORDS[b.state]}`,
       );
     }
     const spent = rowsByMonth.at(-1)!.reduce((sum, row) => sum + row.totalSen, 0);
@@ -97,13 +97,13 @@ function householdLines(budgets: BudgetSummary[], months: string[], rowsByMonth:
   return lines;
 }
 
-function guestLines(budgets: BudgetSummary[], months: string[], rowsByMonth: TransactionRow[][], span: string): string[] {
+function guestLines(names: { id: string; name: string }[], months: string[], rowsByMonth: TransactionRow[][], span: string): string[] {
   const lines: string[] = [];
-  if (budgets.length === 0) {
+  if (names.length === 0) {
     lines.push('There are no budgets yet.');
   } else {
-    lines.push(`Budgets for ${monthLabel(months.at(-1)!)}, with what is left and the state:`);
-    for (const b of budgets) lines.push(`- ${quote(b.name)}: ${left(b.remainingSen)}, ${STATE_WORDS[b.state]}`);
+    lines.push('Budgets this household uses:');
+    for (const b of names) lines.push(`- ${quote(b.name)}`);
   }
 
   lines.push('', 'Their own spending per month:');
@@ -135,24 +135,23 @@ function debtLines(debts: Awaited<ReturnType<typeof debtTotals>>): string[] {
 
 /**
  * The figures the assistant is given with each question: this month and the two before it.
- * Built only from the reads that already apply each role's visibility (a guest's budget summaries
- * carry no amounts and their transaction list holds only their own rows; debts are owner only), so
- * nothing reaches the model that the person could not open in the app. Transaction rows carry no
- * notes or items, and who made each one is never written here.
+ * Built only from the reads that already apply each role's visibility (a guest gets budget names
+ * and only their own rows; debts are owner only), so nothing reaches the model that the person
+ * could not open in the app. Transaction rows carry no notes or items, and who made each one is
+ * never written here.
  */
 export async function buildAssistantContext(viewer: Viewer): Promise<string> {
   const now = new Date();
   const month = monthKey(now);
   const months = Array.from({ length: MONTHS }, (_, i) => shiftMonth(month, i - (MONTHS - 1)));
-  const [budgets, rowsByMonth, debts] = await Promise.all([
-    listBudgetSummaries(viewer, month),
+  const [rowsByMonth, debts] = await Promise.all([
     Promise.all(months.map((m) => listTransactions(viewer, { month: m }))),
     viewer.role === 'owner' ? debtTotals(viewer) : null,
   ]);
   const span = `${monthLabel(months[0])} to ${monthLabel(month)}`;
   const body =
     viewer.role === 'guest'
-      ? guestLines(budgets, months, rowsByMonth, span)
-      : householdLines(budgets, months, rowsByMonth, span);
+      ? guestLines(await listBudgetNames(viewer), months, rowsByMonth, span)
+      : householdLines(await listBudgetSummaries(viewer, month), months, rowsByMonth, span);
   return [today(now), WHO[viewer.role], '', ...body, ...(debts ? debtLines(debts) : [])].join('\n');
 }
