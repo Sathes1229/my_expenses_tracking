@@ -53,18 +53,17 @@ afterEach(() => {
 });
 
 describe('what each role receives', () => {
-  it('gives a guest budget names, what is left and their own transactions, and nothing else', async () => {
+  it('gives a guest their own transactions and no budget figures', async () => {
     const g = await getDashboard(guest, '2026-11');
     expect(g.totals).toBeUndefined();
     expect(g.byBudget).toBeUndefined();
     expect(g.debts).toBeUndefined();
+    expect(g.budgets).toEqual([]);
     expect(g.recent.every((t) => t.createdById === guest.id)).toBe(true);
     expect(g.recent.map((t) => t.merchant)).toEqual(['Mamak']);
-    expect(Object.keys(g.budgets[0]).sort()).toEqual(['id', 'name', 'remainingSen', 'state']);
-    for (const budget of g.budgets) expect(Object.keys(budget).sort()).toEqual(['id', 'name', 'remainingSen', 'state']);
     // The whole object, as it would be sent: no other person's spending, no household amounts.
     const sent = JSON.stringify(g);
-    for (const hidden of ['Tesco', 'Parking', 'allocationSen', 'spentSen', 'outstandingSen']) {
+    for (const hidden of ['Tesco', 'Parking', 'allocationSen', 'spentSen', 'outstandingSen', 'remainingSen', '"state"', 'thresholdPct']) {
       expect(sent).not.toContain(hidden);
     }
   });

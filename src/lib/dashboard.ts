@@ -23,13 +23,16 @@ const RECENT = 8;
 
 /**
  * The home page for one month, built only from the reads that already apply each role's
- * visibility: a guest's summaries carry no amounts and their transaction list holds only their
- * own rows, so household figures are never computed for them, let alone sent.
+ * visibility. A guest gets no budgets and only their own rows, so household figures are never
+ * computed for them, let alone sent.
  */
 export async function getDashboard(viewer: Viewer, month: string): Promise<Dashboard> {
+  if (viewer.role === 'guest') {
+    const own = await listTransactions(viewer, { month });
+    return { month, budgets: [], recent: own.slice(0, RECENT) };
+  }
   const [budgets, rows] = await Promise.all([listBudgetSummaries(viewer, month), listTransactions(viewer, { month })]);
   const dashboard: Dashboard = { month, budgets, recent: rows.slice(0, RECENT) };
-  if (viewer.role === 'guest') return dashboard;
 
   // Every transaction counts, including Uncategorised and budgets archived since; the allocation
   // is only the active budgets', since an archived budget has none for the month. Grouped by id, not

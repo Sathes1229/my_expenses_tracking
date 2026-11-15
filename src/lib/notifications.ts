@@ -41,8 +41,9 @@ function textFor(level: string, name: string, month: string): string {
     : `${name} has passed its warning level for ${monthLabel(month)}.`;
 }
 
-/** The last 60 days, newest first. Same wording for every role, and no amounts. */
+/** The last 60 days, newest first, with no amounts. Guests get none: an alert tells a budget's state. */
 export async function listNotifications(viewer: Viewer): Promise<NotificationItem[]> {
+  if (viewer.role === 'guest') return [];
   return db
     .select({
       id: notifications.id,
@@ -70,6 +71,7 @@ export async function listNotifications(viewer: Viewer): Promise<NotificationIte
 }
 
 export async function unreadCount(viewer: Viewer): Promise<number> {
+  if (viewer.role === 'guest') return 0;
   const row = db
     .select({ n: sql<number>`count(*)` })
     .from(notifications)
@@ -83,6 +85,7 @@ export async function unreadCount(viewer: Viewer): Promise<number> {
 }
 
 export async function markAllRead(viewer: Viewer): Promise<void> {
+  if (viewer.role === 'guest') return;
   const unread = db
     .select({ id: notifications.id })
     .from(notifications)

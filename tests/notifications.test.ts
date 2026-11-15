@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { notifications } from '@/db/schema';
+import { notificationReads, notifications } from '@/db/schema';
 import { createAccount } from '@/lib/auth/accounts';
 import type { Viewer } from '@/lib/auth/viewer';
 import { archiveBudget, createBudget } from '@/lib/budgets';
@@ -49,7 +50,16 @@ describe('budget alerts', () => {
     const all = await listNotifications(owner);
     expect(all).toHaveLength(2);
     expect(all.map((n) => n.text)).toContain('Groceries is over budget for November 2026.');
-    expect((await listNotifications(guest)).map((n) => n.text).join(' ')).not.toMatch(/RM|\d+\.\d\d/);
+  });
+
+  it('gives guests no alerts and records nothing when they mark them read', async () => {
+    await createTransaction(owner, tx(12000));
+    expect(await listNotifications(owner)).toHaveLength(2);
+    expect(await listNotifications(guest)).toEqual([]);
+    expect(await unreadCount(guest)).toBe(0);
+    await markAllRead(guest);
+    expect(db.select().from(notificationReads).where(eq(notificationReads.userId, guest.id)).all()).toEqual([]);
+    expect(await unreadCount(owner)).toBe(2);
   });
 
   it('creates both notifications on one jump from under the threshold to over 100%', async () => {

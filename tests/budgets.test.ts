@@ -111,14 +111,16 @@ describe('spentFor', () => {
 });
 
 describe('listBudgetSummaries', () => {
-  it('gives guests only id, name, remaining and state', async () => {
+  it('refuses guests', async () => {
+    at('2026-11-15T04:00:00Z');
+    await createBudget(owner, { name: 'Groceries', allocationSen: 80000 });
+    await expect(listBudgetSummaries(guest, '2026-11')).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('gives members the amounts', async () => {
     at('2026-11-15T04:00:00Z');
     const { id } = await createBudget(owner, { name: 'Groceries', allocationSen: 80000 });
     await updateBudget(owner, id, { allocationSen: 100000 });
-
-    const g = (await listBudgetSummaries(guest, '2026-11'))[0];
-    expect(g).toEqual({ id, name: 'Groceries', remainingSen: 100000, state: 'fine' });
-    expect(Object.keys(g).sort()).toEqual(['id', 'name', 'remainingSen', 'state']);
 
     const m = (await listBudgetSummaries(member, '2026-11'))[0];
     expect(m.allocationSen).toBe(100000);
@@ -131,7 +133,7 @@ describe('listBudgetSummaries', () => {
     spend(id, 8000, new Date());
     expect((await listBudgetSummaries(owner, '2026-11'))[0]).toMatchObject({ remainingSen: 2000, state: 'tight', spentSen: 8000 });
     spend(id, 3000, new Date());
-    expect((await listBudgetSummaries(guest, '2026-11'))[0]).toEqual({ id, name: 'Groceries', remainingSen: -1000, state: 'over' });
+    expect((await listBudgetSummaries(member, '2026-11'))[0]).toMatchObject({ id, name: 'Groceries', remainingSen: -1000, state: 'over' });
   });
 
   it('leaves archived budgets out', async () => {

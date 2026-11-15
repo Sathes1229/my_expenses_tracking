@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gte, isNull, lt, lte, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { budgetAllocations, budgets, transactions } from '@/db/schema';
 import { assertOwner, type Viewer } from '@/lib/auth/viewer';
-import { ValidationError } from '@/lib/errors';
+import { ForbiddenError, ValidationError } from '@/lib/errors';
 import { budgetState, type BudgetState } from './budget-state';
 import { monthKey, monthRange } from './time';
 
@@ -17,9 +17,9 @@ export type BudgetSummary = {
   name: string;
   remainingSen: number;
   state: BudgetState;
-  allocationSen?: number;
-  spentSen?: number;
-  thresholdPct?: number;
+  allocationSen: number;
+  spentSen: number;
+  thresholdPct: number;
 };
 
 const NAME_MAX = 60;
@@ -151,24 +151,26 @@ function activeBudgets() {
     .all();
 }
 
-/** Active budgets for a month. Owners and members see the amounts; guests only what is left and the state. */
+/** Active budgets for a month, with their amounts. Guests see budget names only (listBudgetNames). */
 export async function listBudgetSummaries(viewer: Viewer, month: string): Promise<BudgetSummary[]> {
+  if (viewer.role === 'guest') throw new ForbiddenError();
   return Promise.all(
     activeBudgets().map(async (b): Promise<BudgetSummary> => {
       const [allocationSen, spentSen] = await Promise.all([allocationFor(b.id, month), spentFor(b.id, month)]);
-      const base = {
+      return {
         id: b.id,
         name: b.name,
         remainingSen: allocationSen - spentSen,
         state: budgetState(spentSen, allocationSen, b.thresholdPct),
+        allocationSen,
+        spentSen,
+        thresholdPct: b.thresholdPct,
       };
-      if (viewer.role === 'guest') return base;
-      return { ...base, allocationSen, spentSen, thresholdPct: b.thresholdPct };
     }),
   );
 }
 
-/** Active budgets for a picker. Every role may see names, so the viewer is only taken to keep the call shape of the other reads. */
+/** Active budgets for a picker, and all a guest sees of budgets. The viewer is only taken to keep the call shape of the other reads. */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function listBudgetNames(_viewer: Viewer): Promise<{ id: string; name: string }[]> {
   return activeBudgets().map(({ id, name }) => ({ id, name }));
