@@ -21,6 +21,7 @@ export default function LoginPage() {
       <Link href="/reset-owner" className="inline-flex min-h-11 items-center text-sm">
         Reset the owner password
       </Link>
+      <p className="mt-12 text-sm text-muted">Developed by Sathes</p>
     </AuthFrame>
   );
 }
