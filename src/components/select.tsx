@@ -19,7 +19,14 @@ export function Select({ label, hint, error, id, className, children, ...select 
   const fieldId = id ?? autoId;
   return (
     <FieldShell id={fieldId} label={label} hint={hint} error={error} className={className}>
-      <select {...select} {...controlProps(fieldId, { hint, error })} className={controlClass(error)}>
+      {/* React applies a select's defaultValue only when it mounts, and a form reset after an action
+          restores that first value. Keying on it remounts the select whenever the page sends a new one. */}
+      <select
+        key={String(select.defaultValue ?? '')}
+        {...select}
+        {...controlProps(fieldId, { hint, error })}
+        className={controlClass(error)}
+      >
         {children}
       </select>
     </FieldShell>
