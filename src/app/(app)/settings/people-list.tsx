@@ -96,16 +96,19 @@ function PersonRow({ person }: { person: Person }) {
   );
 }
 
-/** Two roles only, so one press switches to the other. Undo is the same button. */
+/** Making someone a guest deletes their assistant conversation, so it asks first. Making a member does not. */
 function RoleForm({ person }: { person: Person }) {
+  return person.role === 'member' ? <MakeGuest person={person} /> : <MakeMember person={person} />;
+}
+
+function MakeMember({ person }: { person: Person }) {
   const [state, action] = useActionState(changeRoleAction, initialFormState);
-  const next = person.role === 'member' ? 'guest' : 'member';
   return (
     <form action={action}>
       <input type="hidden" name="userId" value={person.id} />
-      <input type="hidden" name="role" value={next} />
+      <input type="hidden" name="role" value="member" />
       <SubmitButton variant="quiet">
-        Make {next}
+        Make member
         <span className="sr-only"> ({person.displayName})</span>
       </SubmitButton>
       {state.message && (
@@ -114,6 +117,45 @@ function RoleForm({ person }: { person: Person }) {
         </p>
       )}
     </form>
+  );
+}
+
+function MakeGuest({ person }: { person: Person }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="quiet" onClick={() => setOpen(true)}>
+        Make guest
+        <span className="sr-only"> ({person.displayName})</span>
+      </Button>
+      {open && <MakeGuestDialog person={person} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function MakeGuestDialog({ person, onClose }: { person: Person; onClose: () => void }) {
+  const [state, action] = useActionState(changeRoleAction, initialFormState);
+  const [shown, setShown] = useState(true);
+  const name = person.displayName;
+  // On success the row turns into a guest's, and this dialog leaves the page with the member's button.
+  return (
+    <Dialog open={shown} onClose={onClose} title={`Make ${name} a guest?`}>
+      <form action={action} className="flex flex-col gap-4">
+        <p className="text-muted">
+          {name} will see budget names and only their own entries. Their assistant conversation is deleted,
+          and that cannot be undone.
+        </p>
+        <FormAlert state={state} />
+        <input type="hidden" name="userId" value={person.id} />
+        <input type="hidden" name="role" value="guest" />
+        <div className="mt-2 flex flex-wrap justify-end gap-3">
+          <Button variant="secondary" onClick={() => setShown(false)}>
+            Keep {name} a member
+          </Button>
+          <SubmitButton variant="danger">Make {name} a guest</SubmitButton>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 

@@ -22,6 +22,11 @@ export function monthKey(d: Date): string {
   return `${p.year}-${p.month}`;
 }
 
+/** The latest month an entry can be in: entries may be dated up to a day ahead. */
+export function latestMonth(now: Date = new Date()): string {
+  return monthKey(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+}
+
 export function dayKey(d: Date): string {
   const p = local(d);
   return `${p.year}-${p.month}-${p.day}`;

@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/page-header';
 import { Select } from '@/components/select';
 import { requireViewer } from '@/lib/auth/viewer';
 import { listBudgetNames } from '@/lib/budgets';
-import { monthLabel, parseMonthParam, shiftMonth } from '@/lib/time';
+import { latestMonth, monthLabel, parseMonthParam, shiftMonth } from '@/lib/time';
 import {
   listPeople,
   listTransactions,
@@ -67,7 +67,9 @@ export default function TransactionsPage({ searchParams }: PageProps<'/transacti
 async function Transactions({ searchParams }: Pick<PageProps<'/transactions'>, 'searchParams'>) {
   const viewer = await requireViewer();
   const query = await searchParams;
-  const month = parseMonthParam(text(query.month) || undefined);
+  const asked = parseMonthParam(text(query.month) || undefined);
+  const latest = latestMonth();
+  const month = asked > latest ? latest : asked;
   const method = PAYMENT_METHODS.includes(text(query.method) as PaymentMethod) ? text(query.method) : '';
   const isGuest = viewer.role === 'guest';
   const choices: Choices = { budget: text(query.budget), person: isGuest ? '' : text(query.person), method };
@@ -107,9 +109,11 @@ async function Transactions({ searchParams }: Pick<PageProps<'/transactions'>, '
         <ButtonLink variant="secondary" href={href(shiftMonth(month, -1), choices)}>
           Previous month
         </ButtonLink>
-        <ButtonLink variant="secondary" href={href(shiftMonth(month, 1), choices)}>
-          Next month
-        </ButtonLink>
+        {month < latest && (
+          <ButtonLink variant="secondary" href={href(shiftMonth(month, 1), choices)}>
+            Next month
+          </ButtonLink>
+        )}
       </nav>
 
       <form method="get" action="/transactions" className="mt-5 flex flex-col gap-4 min-[560px]:flex-row min-[560px]:flex-wrap min-[560px]:items-end">

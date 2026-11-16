@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, notInArray, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { budgets, notificationReads, notifications } from '@/db/schema';
 import type { Viewer } from '@/lib/auth/viewer';
@@ -10,9 +10,9 @@ const WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
 export type NotificationItem = { id: string; text: string; createdAt: Date; read: boolean };
 
 /**
- * Records a notification for each warning level this budget has reached in the month. The unique
- * index on (budget, month, level) makes repeats and races harmless. Archived budgets, Uncategorised
- * (`null`) and zero allocations never alert.
+ * Matches a budget's alerts for the month to its spending: one per warning level reached, none for
+ * a level an edit or delete took it back below. The unique index on (budget, month, level) makes
+ * repeats and races harmless. Archived budgets, Uncategorised (`null`) and zero allocations are skipped.
  */
 export async function evaluateBudgetAlerts(budgetId: string | null, month: string): Promise<void> {
   if (budgetId === null) return;
@@ -25,10 +25,14 @@ export async function evaluateBudgetAlerts(budgetId: string | null, month: strin
   const allocationSen = await allocationFor(budgetId, month);
   if (allocationSen === 0) return;
   const state = budgetState(await spentFor(budgetId, month), allocationSen, budget.thresholdPct);
-  if (state === 'fine') return;
-  const levels = state === 'over' ? (['threshold', 'over'] as const) : (['threshold'] as const);
+  const reached: ('threshold' | 'over')[] = state === 'over' ? ['threshold', 'over'] : state === 'tight' ? ['threshold'] : [];
+  const thisBudgetMonth = and(eq(notifications.budgetId, budgetId), eq(notifications.month, month));
+  db.delete(notifications)
+    .where(reached.length > 0 ? and(thisBudgetMonth, notInArray(notifications.level, reached)) : thisBudgetMonth)
+    .run();
+  if (reached.length === 0) return;
   db.insert(notifications)
-    .values(levels.map((level) => ({ budgetId, month, level })))
+    .values(reached.map((level) => ({ budgetId, month, level })))
     .onConflictDoNothing()
     .run();
 }

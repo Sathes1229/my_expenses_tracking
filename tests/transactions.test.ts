@@ -154,6 +154,13 @@ describe('validation', () => {
     ).rejects.toThrow(ValidationError);
   });
 
+  it('allows a total up to RM 1,000,000.00, not more', async () => {
+    await createTransaction(owner, { ...input, totalSen: 100_000_000 });
+    await expect(createTransaction(owner, { ...input, totalSen: 100_000_001 })).rejects.toThrow(
+      'Enter a total up to RM 1,000,000.00.',
+    );
+  });
+
   it('allows up to a day ahead, not more', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-12T00:00:00Z') });
     await createTransaction(owner, { ...input, occurredAt: new Date('2026-11-12T23:00:00Z') });

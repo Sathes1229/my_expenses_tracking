@@ -3,6 +3,7 @@ import { db } from '@/db/client';
 import { budgets, receiptUploads, transactionItems, transactions, user } from '@/db/schema';
 import type { Viewer } from '@/lib/auth/viewer';
 import { ForbiddenError, ValidationError } from '@/lib/errors';
+import { formatRM } from './money';
 import { evaluateBudgetAlerts } from './notifications';
 import { monthKey, monthRange } from './time';
 import { PAYMENT_METHODS, UNCATEGORISED, type ItemInput, type PaymentMethod, type TransactionInput } from './transaction-types';
@@ -46,6 +47,8 @@ const NOTE_MAX = 500;
 const ITEM_NAME_MAX = 100;
 const ITEMS_MAX = 100;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// RM 1,000,000.00. Catches an extra zero or two typed by mistake.
+const TOTAL_MAX_SEN = 100_000_000;
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -102,6 +105,9 @@ function clean(input: TransactionInput): Omit<Clean, 'budgetId'> {
   }
   if (!Number.isSafeInteger(input.totalSen) || input.totalSen <= 0) {
     throw new ValidationError('total', 'Enter a total above RM 0.00.');
+  }
+  if (input.totalSen > TOTAL_MAX_SEN) {
+    throw new ValidationError('total', `Enter a total up to ${formatRM(TOTAL_MAX_SEN)}.`);
   }
   const at = input.occurredAt.getTime();
   if (Number.isNaN(at)) throw new ValidationError('occurredAt', 'Enter a valid date and time.');

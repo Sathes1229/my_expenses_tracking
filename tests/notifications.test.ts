@@ -79,12 +79,33 @@ describe('budget alerts', () => {
   });
 
   it('evaluates the old budget too when a transaction moves out of it', async () => {
-    // Moving a row to another month changes both months; neither may fail or repeat.
+    // Moving a row to another month changes both months. November's alert goes; October gets none,
+    // because the budget's allowance starts in November.
     const { id } = await createTransaction(owner, tx(9000));
     expect(await listNotifications(owner)).toHaveLength(1);
     await updateTransaction(owner, id, tx(9000, groceries, '2026-10-20'));
+    expect(await listNotifications(owner)).toEqual([]);
     await deleteTransaction(owner, id);
-    expect(await listNotifications(owner)).toHaveLength(1);
+    expect(await listNotifications(owner)).toEqual([]);
+  });
+
+  it('withdraws alerts a budget no longer meets after a delete or an edit', async () => {
+    const { id } = await createTransaction(owner, tx(12000));
+    expect(await listNotifications(owner)).toHaveLength(2);
+    await updateTransaction(owner, id, tx(8500));
+    expect((await listNotifications(owner)).map((n) => n.text)).toEqual([
+      'Groceries has passed its warning level for November 2026.',
+    ]);
+    await deleteTransaction(owner, id);
+    expect(await listNotifications(owner)).toEqual([]);
+    expect(await unreadCount(owner)).toBe(0);
+  });
+
+  it('alerts again when a budget goes back over after an alert was withdrawn', async () => {
+    const { id } = await createTransaction(owner, tx(12000));
+    await deleteTransaction(owner, id);
+    await createTransaction(owner, tx(12000));
+    expect(await listNotifications(owner)).toHaveLength(2);
   });
 
   it('skips archived budgets, uncategorised spending and zero allocations', async () => {

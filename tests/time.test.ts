@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dayKey, fromLocalDateTime, monthKey, monthLabel, monthRange, parseMonthParam, shiftMonth, timeKey } from '@/lib/time';
+import { dayKey, fromLocalDateTime, latestMonth, monthKey, monthLabel, monthRange, parseMonthParam, shiftMonth, timeKey } from '@/lib/time';
 
 // 2026-10-31T16:30:00Z is 00:30 on 1 Nov in Malaysia
 const lateOct = new Date('2026-10-31T16:30:00Z');
@@ -43,5 +43,11 @@ describe('time helpers (Asia/Kuala_Lumpur)', () => {
 
   it('reads the Malaysian clock time', () => {
     expect(timeKey(lateOct)).toBe('00:30');
+  });
+
+  it('gives the latest month an entry can be in, a day ahead of now', () => {
+    expect(latestMonth(new Date('2026-11-16T04:00:00Z'))).toBe('2026-11');
+    // 30 November, 8 pm in Malaysia: an entry may already be dated 1 December.
+    expect(latestMonth(new Date('2026-11-30T12:00:00Z'))).toBe('2026-12');
   });
 });
