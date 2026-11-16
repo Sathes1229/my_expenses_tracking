@@ -26,7 +26,7 @@ const WHO: Record<Viewer['role'], string> = {
   member:
     'The person asking is a member of the household. They see every budget and all spending, but not money the owner lent.',
   guest:
-    'The person asking is a guest of the household. They see the budget names and only their own spending. Nothing else is shared with them, so it is not given here.',
+    'The person asking is a guest of the household. They see the budget names and only their own spending. Nothing else is shared with them, so it is not given here. The app shows them no budget amounts on any page, so for those figures they should ask the owner or a member.',
 };
 
 function today(now: Date): string {

@@ -78,6 +78,12 @@ describe('buildAssistantContext', () => {
     expect(g).toContain('Kopitiam'); // their own, two months back
   });
 
+  it('tells the assistant a guest sees no budget amounts anywhere in the app, so it points them to the owner or a member', async () => {
+    const g = await buildAssistantContext(guest);
+    expect(g).toContain('The app shows them no budget amounts on any page');
+    expect(g).toContain('ask the owner or a member');
+  });
+
   it('gives a member budgets, spending, merchants and payment methods, but no debts', async () => {
     const m = await buildAssistantContext(member);
     expect(m).not.toMatch(/Ali/);
