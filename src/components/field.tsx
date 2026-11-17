@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useMessages } from '@/i18n/client';
 import { cx } from './cx';
 
 type LabelledProps = {
@@ -21,6 +22,7 @@ export function FieldShell({
   className,
   children,
 }: LabelledProps & { id: string; className?: string; children: ReactNode }) {
+  const { common } = useMessages();
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
       <label htmlFor={id} className="text-sm font-medium text-ink">
@@ -33,7 +35,7 @@ export function FieldShell({
       )}
       {error && (
         <p id={`${id}-error`} className="text-sm font-medium text-danger">
-          <span className="sr-only">Error: </span>
+          <span className="sr-only">{common.errorPrefix} </span>
           {error}
         </p>
       )}

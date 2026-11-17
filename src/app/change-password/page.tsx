@@ -3,25 +3,29 @@ import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { AuthFrame } from '@/components/auth-frame';
 import { SubmitButton } from '@/components/submit-button';
+import { getMessages } from '@/i18n/server';
 import { getSessionState } from '@/lib/auth/viewer';
 import { signOut } from '../sign-out';
 import { ChangePasswordForm } from './change-password-form';
 
-export const metadata: Metadata = { title: 'Choose a new password | My Expenses' };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getMessages()).auth.changePassword.pageTitle };
+}
 
-export default function ChangePasswordPage() {
+// The copy follows the visitor's language, read from the request, so the page waits for it.
+export const instant = false;
+
+export default async function ChangePasswordPage() {
+  const t = (await getMessages()).auth.changePassword;
   return (
-    <AuthFrame
-      title="Choose a new password"
-      intro="You signed in with a temporary password from the owner. Choose your own before you continue."
-    >
+    <AuthFrame title={t.title} intro={t.intro}>
       <Suspense fallback={null}>
         <OnlyForTemporaryPasswords />
       </Suspense>
       <ChangePasswordForm />
       <form action={signOut} className="mt-6">
         <SubmitButton variant="quiet" className="-ml-3">
-          Sign out instead
+          {t.signOutInstead}
         </SubmitButton>
       </form>
     </AuthFrame>

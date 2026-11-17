@@ -4,23 +4,28 @@ import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { AuthFrame } from '@/components/auth-frame';
+import { getMessages } from '@/i18n/server';
 import { hasAnyUser } from '@/lib/auth/accounts';
 import { env } from '@/lib/env';
 import { ResetOwnerForm } from './reset-owner-form';
 
-export const metadata: Metadata = { title: 'Reset the owner password | My Expenses' };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getMessages()).auth.resetOwner.pageTitle };
+}
 
-export default function ResetOwnerPage() {
+// The copy follows the visitor's language, read from the request, so the page waits for it.
+export const instant = false;
+
+export default async function ResetOwnerPage() {
+  const { auth, common } = await getMessages();
+  const t = auth.resetOwner;
   return (
-    <AuthFrame
-      title="Reset the owner password"
-      intro="For the owner, when the password is lost. It needs the OWNER_RESET_TOKEN value from the app's .env file."
-    >
-      <Suspense fallback={<p className="text-muted">Loading…</p>}>
+    <AuthFrame title={t.title} intro={t.intro}>
+      <Suspense fallback={<p className="text-muted">{common.loading}</p>}>
         <ResetOwnerContent />
       </Suspense>
       <Link href="/login" className="mt-6 inline-flex min-h-11 items-center text-sm">
-        Back to sign in
+        {t.backToSignIn}
       </Link>
     </AuthFrame>
   );
@@ -32,13 +37,11 @@ async function ResetOwnerContent() {
   if (!(await hasAnyUser())) redirect('/setup');
 
   if (!env.OWNER_RESET_TOKEN) {
+    const t = (await getMessages()).auth.resetOwner;
     return (
       <div className="flex flex-col gap-3">
-        <p className="font-medium text-ink">Owner reset is switched off.</p>
-        <p className="text-muted">
-          To turn it on, put a token of your choice in OWNER_RESET_TOKEN in the .env file and restart
-          the app. Then come back here. Each token works once.
-        </p>
+        <p className="font-medium text-ink">{t.offTitle}</p>
+        <p className="text-muted">{t.offBody}</p>
       </div>
     );
   }

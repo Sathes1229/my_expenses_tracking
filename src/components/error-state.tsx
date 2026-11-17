@@ -1,4 +1,7 @@
+'use client';
+
 import type { ReactNode } from 'react';
+import { useMessages } from '@/i18n/client';
 import { Button } from './button';
 
 type ErrorStateProps = {
@@ -11,13 +14,14 @@ type ErrorStateProps = {
 };
 
 export function ErrorState({ title, retry, children }: ErrorStateProps) {
+  const { common } = useMessages();
   return (
     <div role="alert" className="rounded-surface border border-danger bg-surface px-5 py-6">
       <p className="font-semibold text-ink">{title}</p>
       {children && <div className="mt-1 text-muted">{children}</div>}
       {retry && (
         <Button variant="secondary" onClick={retry} className="mt-4">
-          Try again
+          {common.tryAgain}
         </Button>
       )}
     </div>

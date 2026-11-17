@@ -63,6 +63,100 @@ export const en = {
   common: {
     uncategorised: 'Uncategorised',
     payment: { qr: 'QR', cash: 'Cash', card: 'Card', other: 'Other' },
+    signIn: 'Sign in',
+    signOut: 'Sign out',
+    tryAgain: 'Try again',
+    loading: 'Loading…',
+    // Read by screen readers before a field's error; a space follows it on the page.
+    errorPrefix: 'Error:',
+  },
+  auth: {
+    fields: {
+      yourName: 'Your name',
+      yourNameHint: 'Shown to everyone in the household.',
+      username: 'Username',
+      usernameHint: 'You sign in with this. 3 to 30 characters: letters, numbers, dots or underscores.',
+      password: 'Password',
+      passwordHint: 'At least 8 characters.',
+      repeatPassword: 'Repeat password',
+      newPassword: 'New password',
+      repeatNewPassword: 'Repeat new password',
+    },
+    login: {
+      pageTitle: 'Sign in | My Expenses',
+      forgotPassword: 'Forgot your password? Ask the owner to reset it.',
+    },
+    setup: {
+      pageTitle: 'Create the owner account | My Expenses',
+      title: 'Create the owner account',
+      intro: 'This first account runs the app: it sets the budgets and invites everyone else.',
+      submit: 'Create owner account',
+    },
+    invite: {
+      pageTitle: 'Join My Expenses | My Expenses',
+      title: 'Join My Expenses',
+      checking: 'Checking your invite…',
+      signedInAs: 'You are signed in as {name}.',
+      signOutFirst: 'This link makes a new account. To use it, sign out first, then open the link again.',
+      staySignedIn: 'Stay signed in',
+      invitedAs: {
+        member: 'You are invited as a member.',
+        guest: 'You are invited as a guest.',
+      },
+      whatYouSee: {
+        member: "As a member you see the household budgets and everyone's spending, and add your own.",
+        guest: 'As a guest you see the budget names and the entries you add yourself.',
+      },
+      pickName: 'Pick your name and how you will sign in.',
+      submit: 'Create my account',
+      problems: {
+        used: {
+          title: 'This invite was already used.',
+          detail: 'Each link works once. If you made your account with it, sign in.',
+        },
+        expired: {
+          title: 'This invite has expired.',
+          detail: 'Invite links work for 7 days. Ask the person who sent it for a new one.',
+        },
+        revoked: {
+          title: 'This invite was cancelled.',
+          detail: 'Ask the person who sent it for a new link.',
+        },
+        unknown: {
+          title: 'This invite link does not work.',
+          detail: 'Check that you copied the whole link, or ask the person who sent it for a new one.',
+        },
+      },
+      errorTitle: 'Your invite could not be checked or used just now.',
+      errorBody: 'Try again in a moment. If it keeps failing, tell the person who sent you the link.',
+    },
+    changePassword: {
+      pageTitle: 'Choose a new password | My Expenses',
+      title: 'Choose a new password',
+      intro: 'You signed in with a temporary password from the owner. Choose your own before you continue.',
+      passwordHint: 'At least 8 characters, not the temporary one.',
+      submit: 'Save password',
+      signOutInstead: 'Sign out instead',
+    },
+    resetOwner: {
+      pageTitle: 'Reset the owner password | My Expenses',
+      title: 'Reset the owner password',
+      intro: "For the owner, when the password is lost. It needs the OWNER_RESET_TOKEN value from the app's .env file.",
+      backToSignIn: 'Back to sign in',
+      offTitle: 'Owner reset is switched off.',
+      offBody:
+        'To turn it on, put a token of your choice in OWNER_RESET_TOKEN in the .env file and restart the app. Then come back here. Each token works once.',
+      token: 'Reset token',
+      tokenHint: 'Each token works once, and using it signs the owner out on every device.',
+      submit: 'Reset owner password',
+      done: 'The owner password is changed and the owner is signed out everywhere. You can remove OWNER_RESET_TOKEN from the .env file now.',
+      signInWithNew: 'Sign in with the new password',
+    },
+    error: {
+      heading: 'Something went wrong',
+      title: 'My Expenses could not finish loading this page.',
+      body: 'Try again in a moment. If it keeps failing, the app may need a restart on the computer it runs on.',
+    },
   },
   export: {
     button: 'Export to Excel',

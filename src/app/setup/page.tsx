@@ -3,17 +3,21 @@ import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { AuthFrame } from '@/components/auth-frame';
+import { getMessages } from '@/i18n/server';
 import { hasAnyUser } from '@/lib/auth/accounts';
 import { SetupForm } from './setup-form';
 
-export const metadata: Metadata = { title: 'Create the owner account | My Expenses' };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getMessages()).auth.setup.pageTitle };
+}
 
-export default function SetupPage() {
+// The copy follows the visitor's language, read from the request, so the page waits for it.
+export const instant = false;
+
+export default async function SetupPage() {
+  const t = (await getMessages()).auth.setup;
   return (
-    <AuthFrame
-      title="Create the owner account"
-      intro="This first account runs the app: it sets the budgets and invites everyone else."
-    >
+    <AuthFrame title={t.title} intro={t.intro}>
       <Suspense fallback={null}>
         <ClosedOnceSetUp />
       </Suspense>
