@@ -63,7 +63,7 @@
 `tests/i18n/catalog.test.ts`:
 - every leaf in `messages.en` and `messages.ms` is a non-empty string, and the two catalogs have the same key paths;
 - for each key, the `{placeholders}` in `ms` are the same set as in `en`;
-- no value in either catalog contains `—` or `–`;
+- no value in either catalog contains an em dash (U+2014) or an en dash (U+2013);
 - `fmt('Hi {name}, {n} left', { name: 'Aminah', n: 3 })` is `'Hi Aminah, 3 left'`, and a missing param leaves `{name}` in place.
 
 `tests/time.test.ts` (add): `monthLabel('2026-08', 'ms')` is `'Ogos 2026'`, `monthLabel('2026-03', 'ms')` is `'Mac 2026'`, and `monthLabel('2026-08')` is still `'August 2026'`.
