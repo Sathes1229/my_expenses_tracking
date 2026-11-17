@@ -1,12 +1,16 @@
 import Link from 'next/link';
+import { fmt } from '@/i18n/format';
+import type { Locale } from '@/i18n/locale';
+import { messages } from '@/i18n/messages';
 import { BellIcon } from './icons';
 
 /**
  * The link to /notifications. The count is written out as a number (never a dot or a colour
  * alone), and the accessible name carries the same count.
  */
-export function NotificationBell({ unread }: { unread: number }) {
-  const label = unread > 0 ? `Notifications, ${unread} unread` : 'Notifications';
+export function NotificationBell({ unread, locale }: { unread: number; locale: Locale }) {
+  const t = messages[locale].notifications;
+  const label = unread > 0 ? fmt(t.unread, { count: unread }) : t.title;
   return (
     <Link
       href="/notifications"

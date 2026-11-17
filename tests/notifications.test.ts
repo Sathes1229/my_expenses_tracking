@@ -70,6 +70,14 @@ describe('budget alerts', () => {
     ]);
   });
 
+  it('writes the alerts in the language asked for, with the budget name as typed', async () => {
+    await createTransaction(owner, tx(12000));
+    expect((await listNotifications(owner, 'ms')).map((n) => n.text).sort()).toEqual([
+      'Groceries melebihi bajet untuk November 2026.',
+      'Groceries telah melepasi paras amaran untuk November 2026.',
+    ]);
+  });
+
   it('alerts the new budget when a transaction is moved into it', async () => {
     const school = (await createBudget(owner, { name: 'School', allocationSen: 10000 })).id;
     const petrol = (await createBudget(owner, { name: 'Petrol', allocationSen: 10000 })).id;

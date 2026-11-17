@@ -7,6 +7,8 @@ import { Field } from '@/components/field';
 import { FormAlert } from '@/components/form-alert';
 import { SubmitButton } from '@/components/submit-button';
 import { useFocusFirstInvalid } from '@/components/use-focus-first-invalid';
+import { useMessages } from '@/i18n/client';
+import { fmt } from '@/i18n/format';
 import { initialFormState, type FormState } from '@/lib/form-state';
 import { formatRM, parseRM } from '@/lib/money';
 import { archiveBudgetAction, createBudgetAction, updateBudgetAction } from './actions';
@@ -31,6 +33,7 @@ function useCloseOnDone(state: FormState, close: () => void) {
 }
 
 function BudgetFields({ state, initial }: { state: FormState; initial?: EditableBudget }) {
+  const t = useMessages().budgets;
   const errors = state.fieldErrors;
   const [allocation, setAllocation] = useState(state.values?.allocation ?? (initial ? input(initial.allocationSen) : ''));
   const [threshold, setThreshold] = useState(state.values?.threshold ?? String(initial?.thresholdPct ?? 80));
@@ -39,13 +42,13 @@ function BudgetFields({ state, initial }: { state: FormState; initial?: Editable
   const pct = /^\d{1,3}$/.test(threshold.trim()) ? Number(threshold) : NaN;
   const worth =
     sen !== null && pct >= 1 && pct <= 100
-      ? `${pct}% of ${formatRM(sen)} is ${formatRM(nearLimitSen(sen, pct))}. It shows Near limit from there.`
-      : 'Enter the amount and a level from 1 to 100 to see what it comes to.';
+      ? fmt(t.thresholdWorth, { percent: pct, amount: formatRM(sen), limit: formatRM(nearLimitSen(sen, pct)) })
+      : t.thresholdPrompt;
 
   return (
     <>
       <Field
-        label="Name"
+        label={t.name}
         name="name"
         defaultValue={state.values?.name ?? initial?.name ?? ''}
         error={errors?.name}
@@ -53,8 +56,8 @@ function BudgetFields({ state, initial }: { state: FormState; initial?: Editable
         autoComplete="off"
       />
       <Field
-        label="Amount per month (RM)"
-        hint={initial ? 'A new amount applies from this month. Earlier months keep theirs.' : 'Applies from this month.'}
+        label={t.amount}
+        hint={initial ? t.amountHintEdit : t.amountHintNew}
         name="allocation"
         inputMode="decimal"
         autoComplete="off"
@@ -63,7 +66,7 @@ function BudgetFields({ state, initial }: { state: FormState; initial?: Editable
         error={errors?.allocation}
       />
       <Field
-        label="Near-limit level (%)"
+        label={t.threshold}
         hint={worth}
         name="threshold"
         inputMode="numeric"
@@ -88,6 +91,7 @@ function BudgetForm({
   onClose: () => void;
 }) {
   const [state, action] = useActionState(initial ? updateBudgetAction : createBudgetAction, initialFormState);
+  const { common } = useMessages();
   const formRef = useFocusFirstInvalid(state);
   const [shown, setShown] = useState(true);
   useCloseOnDone(state, () => setShown(false));
@@ -99,7 +103,7 @@ function BudgetForm({
         <BudgetFields state={state} initial={initial} />
         <div className="mt-2 flex flex-wrap justify-end gap-3">
           <Button variant="secondary" onClick={() => setShown(false)}>
-            Cancel
+            {common.cancel}
           </Button>
           <SubmitButton>{submitLabel}</SubmitButton>
         </div>
@@ -111,12 +115,13 @@ function BudgetForm({
 /** The dialog is mounted only while open, so a closed form never keeps old input. */
 export function AddBudget({ variant = 'primary' }: { variant?: 'primary' | 'secondary' }) {
   const [open, setOpen] = useState(false);
+  const t = useMessages().budgets;
   return (
     <>
       <Button variant={variant} onClick={() => setOpen(true)}>
-        Add a budget
+        {t.add}
       </Button>
-      {open && <BudgetForm title="Add a budget" submitLabel="Add budget" onClose={() => setOpen(false)} />}
+      {open && <BudgetForm title={t.add} submitLabel={t.addSubmit} onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -132,16 +137,17 @@ export function BudgetActions({ budget }: { budget: EditableBudget }) {
 
 function EditBudget({ budget }: { budget: EditableBudget }) {
   const [open, setOpen] = useState(false);
+  const { common, budgets: t } = useMessages();
   return (
     <>
       <Button variant="quiet" onClick={() => setOpen(true)}>
-        Edit
+        {common.edit}
         <span className="sr-only"> {budget.name}</span>
       </Button>
       {open && (
         <BudgetForm
-          title={`Edit ${budget.name}`}
-          submitLabel="Save changes"
+          title={fmt(t.editTitle, { name: budget.name })}
+          submitLabel={t.saveChanges}
           initial={budget}
           onClose={() => setOpen(false)}
         />
@@ -152,10 +158,11 @@ function EditBudget({ budget }: { budget: EditableBudget }) {
 
 function ArchiveBudget({ budget }: { budget: EditableBudget }) {
   const [open, setOpen] = useState(false);
+  const { common } = useMessages();
   return (
     <>
       <Button variant="quiet" onClick={() => setOpen(true)}>
-        Archive
+        {common.archive}
         <span className="sr-only"> {budget.name}</span>
       </Button>
       {open && <ArchiveDialog budget={budget} onClose={() => setOpen(false)} />}
@@ -167,20 +174,19 @@ function ArchiveDialog({ budget, onClose }: { budget: EditableBudget; onClose: (
   const [state, action] = useActionState(archiveBudgetAction, initialFormState);
   const [shown, setShown] = useState(true);
   useCloseOnDone(state, () => setShown(false));
+  const t = useMessages().budgets;
+  const name = { name: budget.name };
   return (
-    <Dialog open={shown} onClose={onClose} title={`Archive ${budget.name}?`}>
+    <Dialog open={shown} onClose={onClose} title={fmt(t.archiveTitle, name)}>
       <form action={action} className="flex flex-col gap-4">
-        <p className="text-muted">
-          It leaves this list and the budget pickers. Transactions already filed under it keep the name, so
-          past months do not change. You can add a budget with the same name again later.
-        </p>
+        <p className="text-muted">{t.archiveBody}</p>
         <FormAlert state={state} />
         <input type="hidden" name="budgetId" value={budget.id} />
         <div className="mt-2 flex flex-wrap justify-end gap-3">
           <Button variant="secondary" onClick={() => setShown(false)}>
-            Keep {budget.name}
+            {fmt(t.keep, name)}
           </Button>
-          <SubmitButton variant="danger">Archive {budget.name}</SubmitButton>
+          <SubmitButton variant="danger">{fmt(t.archiveConfirm, name)}</SubmitButton>
         </div>
       </form>
     </Dialog>

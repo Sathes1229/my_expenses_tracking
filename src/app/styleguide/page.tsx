@@ -158,9 +158,9 @@ export default function StyleguidePage() {
 
       <Section id="state" title="Budget state" note="Colour plus a word, never colour alone. On track stays neutral so problems stand out.">
         <div className="flex flex-wrap gap-x-6 gap-y-3">
-          <StateTag state="fine" />
-          <StateTag state="tight" />
-          <StateTag state="over" />
+          <StateTag state="fine" locale="en" />
+          <StateTag state="tight" locale="en" />
+          <StateTag state="over" locale="en" />
         </div>
       </Section>
 
@@ -172,7 +172,7 @@ export default function StyleguidePage() {
               <li key={name} className="py-4">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="font-medium">{name}</span>
-                  <StateTag state={state} />
+                  <StateTag state={state} locale="en" />
                 </div>
                 <div className="mt-2">
                   <Meter value={spent} max={allocation} state={state} threshold={80} label={`${name} budget used`} />

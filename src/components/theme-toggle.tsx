@@ -1,5 +1,6 @@
 'use client';
 
+import { useMessages } from '@/i18n/client';
 import { Button } from './button';
 import { THEME_KEY, type Theme } from './theme-script';
 
@@ -26,10 +27,11 @@ export function ThemeToggle() {
     }
   }
 
+  const t = useMessages().shell;
   return (
     <Button variant="quiet" onClick={toggle} className="whitespace-nowrap">
-      <span className="dark:hidden">Dark theme</span>
-      <span className="hidden dark:inline">Light theme</span>
+      <span className="dark:hidden">{t.darkTheme}</span>
+      <span className="hidden dark:inline">{t.lightTheme}</span>
     </Button>
   );
 }

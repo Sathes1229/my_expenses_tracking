@@ -1,6 +1,9 @@
 import { and, desc, eq, gte, isNull, notInArray, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { budgets, notificationReads, notifications } from '@/db/schema';
+import { fmt } from '@/i18n/format';
+import type { Locale } from '@/i18n/locale';
+import { messages } from '@/i18n/messages';
 import type { Viewer } from '@/lib/auth/viewer';
 import { allocationFor, budgetState, spentFor } from './budgets';
 import { monthLabel } from './time';
@@ -39,14 +42,16 @@ export async function evaluateBudgetAlerts(budgetId: string | null, month: strin
 
 const since = () => Date.now() - WINDOW_MS;
 
-function textFor(level: string, name: string, month: string): string {
-  return level === 'over'
-    ? `${name} is over budget for ${monthLabel(month)}.`
-    : `${name} has passed its warning level for ${monthLabel(month)}.`;
+function textFor(level: string, name: string, month: string, locale: Locale): string {
+  const t = messages[locale].notifications;
+  return fmt(level === 'over' ? t.over : t.warning, { budget: name, month: monthLabel(month, locale) });
 }
 
-/** The last 60 days, newest first, with no amounts. Guests get none: an alert tells a budget's state. */
-export async function listNotifications(viewer: Viewer): Promise<NotificationItem[]> {
+/**
+ * The last 60 days, newest first, with no amounts, worded in `locale`. Guests get none: an alert
+ * tells a budget's state.
+ */
+export async function listNotifications(viewer: Viewer, locale: Locale = 'en'): Promise<NotificationItem[]> {
   if (viewer.role === 'guest') return [];
   return db
     .select({
@@ -68,7 +73,7 @@ export async function listNotifications(viewer: Viewer): Promise<NotificationIte
     .all()
     .map((r) => ({
       id: r.id,
-      text: textFor(r.level, r.name, r.month),
+      text: textFor(r.level, r.name, r.month, locale),
       createdAt: new Date(r.createdAt),
       read: r.readAt !== null,
     }));

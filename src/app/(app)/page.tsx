@@ -6,26 +6,33 @@ import { cx } from '@/components/cx';
 import { EmptyState } from '@/components/empty-state';
 import { CameraIcon } from '@/components/icons';
 import { Meter } from '@/components/meter';
-import { Money } from '@/components/money';
+import { Money, MoneySentence } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
 import { StateTag } from '@/components/state-tag';
+import { fmt } from '@/i18n/format';
+import type { Locale } from '@/i18n/locale';
+import type { Messages } from '@/i18n/messages';
+import { getLocale, getMessages } from '@/i18n/server';
 import { requireViewer } from '@/lib/auth/viewer';
 import type { BudgetSummary } from '@/lib/budgets';
 import { getDashboard, type Dashboard } from '@/lib/dashboard';
 import { monthKey, monthLabel, parseMonthParam, shiftMonth } from '@/lib/time';
 import { TransactionList } from './transactions/transaction-list';
 
-export const metadata: Metadata = { title: 'Home | My Expenses' };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getMessages()).home.pageTitle };
+}
 
 // Blocks on the session read, like the (app) layout.
 export const instant = false;
 
-export default function HomePage({ searchParams }: PageProps<'/'>) {
+export default async function HomePage({ searchParams }: PageProps<'/'>) {
+  const t = (await getMessages()).home;
   return (
     <Suspense
       fallback={
         <p role="status" className="text-muted">
-          Loading this month…
+          {t.loading}
         </p>
       }
     >
@@ -45,7 +52,8 @@ async function Home({ searchParams }: Pick<PageProps<'/'>, 'searchParams'>) {
   const asked = parseMonthParam(typeof raw === 'string' ? raw : undefined);
   // Nothing has happened in a later month yet, so the switcher stops at this one.
   const month = asked > thisMonth ? thisMonth : asked;
-  const data = await getDashboard(viewer, month);
+  const [locale, m, data] = await Promise.all([getLocale(), getMessages(), getDashboard(viewer, month)]);
+  const t = m.home;
   const isOwner = viewer.role === 'owner';
   const isGuest = viewer.role === 'guest';
   const hasBudgets = data.budgets.length > 0;
@@ -53,15 +61,15 @@ async function Home({ searchParams }: Pick<PageProps<'/'>, 'searchParams'>) {
   return (
     <>
       <PageHeader
-        title={monthLabel(month)}
+        title={monthLabel(month, locale)}
         action={
-          <nav aria-label="Month" className="flex flex-wrap gap-2">
+          <nav aria-label={m.common.month} className="flex flex-wrap gap-2">
             <ButtonLink variant="secondary" href={`/?month=${shiftMonth(month, -1)}`}>
-              Previous month
+              {m.common.previousMonth}
             </ButtonLink>
             {month < thisMonth && (
               <ButtonLink variant="secondary" href={`/?month=${shiftMonth(month, 1)}`}>
-                Next month
+                {m.common.nextMonth}
               </ButtonLink>
             )}
           </nav>
@@ -74,27 +82,29 @@ async function Home({ searchParams }: Pick<PageProps<'/'>, 'searchParams'>) {
           {/* A guest gets no budgets from the server, so nothing about them shows here. */}
           {!isGuest &&
             (!hasBudgets ? (
-              <NoBudgets isOwner={isOwner} />
+              <NoBudgets isOwner={isOwner} m={m} />
             ) : (
-              data.totals && <LeftThisMonth totals={data.totals} month={month} isCurrent={month === thisMonth} />
+              data.totals && (
+                <LeftThisMonth totals={data.totals} month={month} isCurrent={month === thisMonth} t={t} locale={locale} />
+              )
             ))}
           {/* First in the column for a guest, who has no total above it. */}
           <div className="mt-6 flex flex-wrap gap-3 first:mt-0">
             <ButtonLink href="/transactions/scan" variant={isOwner && !hasBudgets ? 'secondary' : 'primary'} className="gap-2">
               <CameraIcon />
-              Scan receipt
+              {t.scanReceipt}
             </ButtonLink>
             <ButtonLink href="/transactions/new" variant="secondary">
-              Add manually
+              {t.addManually}
             </ButtonLink>
           </div>
-          <NeedsAttention budgets={data.budgets} />
-          {hasBudgets && <Budgets budgets={data.budgets} />}
-          {data.byBudget && data.byBudget.length > 0 && <SpendingByBudget rows={data.byBudget} />}
+          <NeedsAttention budgets={data.budgets} t={t} locale={locale} />
+          {hasBudgets && <Budgets budgets={data.budgets} t={m.budgets} locale={locale} />}
+          {data.byBudget && data.byBudget.length > 0 && <SpendingByBudget rows={data.byBudget} m={m} />}
         </div>
         <div className="min-w-0">
-          <Recent data={data} isGuest={isGuest} />
-          {data.debts && <OwedToYou debts={data.debts} />}
+          <Recent data={data} isGuest={isGuest} t={t} locale={locale} />
+          {data.debts && <OwedToYou debts={data.debts} t={t} />}
         </div>
       </div>
     </>
@@ -102,12 +112,11 @@ async function Home({ searchParams }: Pick<PageProps<'/'>, 'searchParams'>) {
 }
 
 /** A brand new household. Only the owner can add budgets, so only the owner gets the way there. */
-function NoBudgets({ isOwner }: { isOwner: boolean }) {
-  if (!isOwner) return <EmptyState title="The owner has not set up any budgets yet." />;
+function NoBudgets({ isOwner, m }: { isOwner: boolean; m: Messages }) {
+  if (!isOwner) return <EmptyState title={m.home.ownerHasNoBudgets} />;
   return (
-    <EmptyState title="No budgets yet" action={<ButtonLink href="/budgets">Set up budgets</ButtonLink>}>
-      A budget is a monthly amount for one kind of spending, such as groceries. Once there is one, this page shows how
-      much is left each month.
+    <EmptyState title={m.budgets.emptyTitle} action={<ButtonLink href="/budgets">{m.home.setUpBudgets}</ButtonLink>}>
+      {m.home.noBudgetsBody}
     </EmptyState>
   );
 }
@@ -117,36 +126,40 @@ function LeftThisMonth({
   totals,
   month,
   isCurrent,
+  t,
+  locale,
 }: {
   totals: NonNullable<Dashboard['totals']>;
   month: string;
   isCurrent: boolean;
+  t: Messages['home'];
+  locale: Locale;
 }) {
   const left = totals.allocatedSen - totals.spentSen;
-  const when = isCurrent ? 'this month' : `in ${monthLabel(month)}`;
+  const values = { month: monthLabel(month, locale) };
+  const heading = left < 0 ? (isCurrent ? t.overThisMonth : fmt(t.overIn, values)) : isCurrent ? t.leftThisMonth : fmt(t.leftIn, values);
   return (
     <section aria-labelledby="left-heading">
       <h2 id="left-heading" className="text-muted">
-        {left < 0 ? `Over budget ${when}` : `Left ${when}`}
+        {heading}
       </h2>
       <p className={cx('mt-1 text-focal font-semibold', left < 0 ? 'text-danger' : 'text-ink')}>
         <Money sen={Math.abs(left)} />
       </p>
       <p className="mt-2 text-muted">
-        <Money sen={totals.spentSen} /> spent of <Money sen={totals.allocatedSen} /> budgeted
+        <MoneySentence text={t.spentOfBudgeted} amounts={{ spent: totals.spentSen, budgeted: totals.allocatedSen }} />
       </p>
     </section>
   );
 }
 
 /** Budgets past their near-limit level or over, worst first. Owners and members only: a guest's dashboard has no budgets. */
-function NeedsAttention({ budgets }: { budgets: BudgetSummary[] }) {
+function NeedsAttention({ budgets, t, locale }: { budgets: BudgetSummary[]; t: Messages['home']; locale: Locale }) {
   const over = budgets.filter((b) => b.state === 'over');
   const tight = budgets.filter((b) => b.state === 'tight');
   const flagged = [...over, ...tight];
   if (flagged.length === 0) return null;
-  const title =
-    flagged.length === 1 ? '1 budget is near or over its limit' : `${flagged.length} budgets are near or over their limit`;
+  const title = flagged.length === 1 ? t.oneFlagged : fmt(t.manyFlagged, { count: flagged.length });
   return (
     <section
       aria-labelledby="attention-heading"
@@ -159,7 +172,7 @@ function NeedsAttention({ budgets }: { budgets: BudgetSummary[] }) {
         {flagged.map((b) => (
           <li key={b.id} className="flex flex-wrap items-baseline gap-x-3 py-0.5">
             <span className="min-w-0 break-words text-ink">{b.name}</span>
-            <StateTag state={b.state} />
+            <StateTag state={b.state} locale={locale} />
           </li>
         ))}
       </ul>
@@ -168,11 +181,11 @@ function NeedsAttention({ budgets }: { budgets: BudgetSummary[] }) {
 }
 
 /** Each budget's state, what is left, the meter and the amounts. Owners and members only. */
-function Budgets({ budgets }: { budgets: BudgetSummary[] }) {
+function Budgets({ budgets, t, locale }: { budgets: BudgetSummary[]; t: Messages['budgets']; locale: Locale }) {
   return (
     <section aria-labelledby="budgets-heading" className="mt-10">
       <h2 id="budgets-heading" className="text-lg font-semibold text-ink">
-        Budgets
+        {t.title}
       </h2>
       <ul className="mt-3 divide-y divide-line rounded-surface border border-line bg-surface">
         {budgets.map((b) => (
@@ -181,18 +194,18 @@ function Budgets({ budgets }: { budgets: BudgetSummary[] }) {
               <h3 className="min-w-0 font-semibold break-words text-ink">{b.name}</h3>
               <p className="text-ink">
                 <Money sen={Math.abs(b.remainingSen)} className="text-lg font-semibold" />
-                <span className="text-muted">{b.remainingSen < 0 ? ' over' : ' left'}</span>
+                <span className="text-muted">{` ${b.remainingSen < 0 ? t.over : t.left}`}</span>
               </p>
             </div>
             <div className="mt-1">
-              <StateTag state={b.state} />
+              <StateTag state={b.state} locale={locale} />
             </div>
             {/* No label: the same amounts are written just below, so the meter is hidden from screen readers. */}
             <div className="mt-2">
               <Meter value={b.spentSen} max={b.allocationSen} state={b.state} threshold={b.thresholdPct} />
             </div>
             <p className="mt-1 text-sm text-muted">
-              <Money sen={b.spentSen} /> spent of <Money sen={b.allocationSen} />
+              <MoneySentence text={t.spentOf} amounts={{ spent: b.spentSen, allocation: b.allocationSen }} />
             </p>
           </li>
         ))}
@@ -205,12 +218,16 @@ function Budgets({ budgets }: { budgets: BudgetSummary[] }) {
  * Plain bars scaled to the largest amount, each with its amount written beside it, so the bar is
  * only a picture of a number already on screen. Phones: name and amount on one line, bar below.
  */
-function SpendingByBudget({ rows }: { rows: NonNullable<Dashboard['byBudget']> }) {
+function SpendingByBudget({ rows, m }: { rows: NonNullable<Dashboard['byBudget']>; m: Messages }) {
   const largest = rows[0].spentSen;
+  const nameOf = (row: (typeof rows)[number]) => {
+    if (row.id === null) return m.common.uncategorised;
+    return row.archived ? fmt(m.common.archived, { name: row.name }) : row.name;
+  };
   return (
     <section aria-labelledby="spending-heading" className="mt-10">
       <h2 id="spending-heading" className="text-lg font-semibold text-ink">
-        Spending by budget
+        {m.home.spendingByBudget}
       </h2>
       <ul className="mt-3 flex flex-col gap-3">
         {rows.map((row) => (
@@ -218,7 +235,7 @@ function SpendingByBudget({ rows }: { rows: NonNullable<Dashboard['byBudget']> }
             key={row.id ?? 'uncategorised'}
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_auto]"
           >
-            <span className="col-start-1 row-start-1 min-w-0 break-words text-ink">{row.name}</span>
+            <span className="col-start-1 row-start-1 min-w-0 break-words text-ink">{nameOf(row)}</span>
             <span aria-hidden="true" className="col-span-2 row-start-2 h-2.5 sm:col-span-1 sm:col-start-2 sm:row-start-1">
               <span className="block h-full min-w-0.5 bg-meter-fill" style={{ width: `${(row.spentSen / largest) * 100}%` }} />
             </span>
@@ -230,24 +247,22 @@ function SpendingByBudget({ rows }: { rows: NonNullable<Dashboard['byBudget']> }
   );
 }
 
-function Recent({ data, isGuest }: { data: Dashboard; isGuest: boolean }) {
-  const label = monthLabel(data.month);
+function Recent({ data, isGuest, t, locale }: { data: Dashboard; isGuest: boolean; t: Messages['home']; locale: Locale }) {
+  const values = { month: monthLabel(data.month, locale) };
   return (
     <section aria-labelledby="recent-heading">
       <h2 id="recent-heading" className="text-lg font-semibold text-ink">
-        {isGuest ? 'Your latest transactions' : 'Latest transactions'}
+        {isGuest ? t.yourLatestTransactions : t.latestTransactions}
       </h2>
       {data.recent.length === 0 ? (
-        <p className="mt-2 text-muted">
-          {isGuest ? `You have not added any transactions in ${label}.` : `No transactions in ${label}.`}
-        </p>
+        <p className="mt-2 text-muted">{fmt(isGuest ? t.youAddedNone : t.noTransactions, values)}</p>
       ) : (
         <>
           <div className="mt-3">
             <TransactionList rows={data.recent} />
           </div>
           <Link href={`/transactions?month=${data.month}`} className={cx(standaloneLink, 'mt-1')}>
-            All transactions in {label}
+            {fmt(t.allTransactionsIn, values)}
           </Link>
         </>
       )}
@@ -256,14 +271,14 @@ function Recent({ data, isGuest }: { data: Dashboard; isGuest: boolean }) {
 }
 
 /** Owner only. Debts are not tied to a month, so this is what is owed today. */
-function OwedToYou({ debts }: { debts: NonNullable<Dashboard['debts']> }) {
+function OwedToYou({ debts, t }: { debts: NonNullable<Dashboard['debts']>; t: Messages['home'] }) {
   return (
     <section aria-labelledby="debts-heading" className="mt-10">
       <h2 id="debts-heading" className="text-lg font-semibold text-ink">
-        Owed to you
+        {t.owedToYou}
       </h2>
       {debts.people.length === 0 ? (
-        <p className="mt-2 text-muted">Nobody owes you money right now.</p>
+        <p className="mt-2 text-muted">{t.nobodyOwes}</p>
       ) : (
         <>
           <p className="mt-1 text-2xl font-semibold text-ink">
@@ -280,7 +295,7 @@ function OwedToYou({ debts }: { debts: NonNullable<Dashboard['debts']> }) {
         </>
       )}
       <Link href="/debts" className={cx(standaloneLink, 'mt-1')}>
-        Open Debts
+        {t.openDebts}
       </Link>
     </section>
   );

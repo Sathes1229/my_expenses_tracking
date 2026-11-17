@@ -5,7 +5,8 @@ import { cx } from '@/components/cx';
 import { NotificationBell } from '@/components/notification-bell';
 import { SubmitButton } from '@/components/submit-button';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { getMessages } from '@/i18n/server';
+import { fmt } from '@/i18n/format';
+import { getLocale, getMessages } from '@/i18n/server';
 import { requireViewer } from '@/lib/auth/viewer';
 import { unreadCount } from '@/lib/notifications';
 import { signOut } from '../sign-out';
@@ -23,9 +24,11 @@ export const viewport: Viewport = { viewportFit: 'cover' };
  * The guard for every page under (app): nothing renders until requireViewer passes. Pages still
  * call requireViewer themselves, since a layout does not re-run when navigating between them.
  */
-export default function SignedInLayout({ children }: LayoutProps<'/'>) {
+export default async function SignedInLayout({ children }: LayoutProps<'/'>) {
+  // The root layout already waits for the language, so reading it here holds nothing up.
+  const { common } = await getMessages();
   return (
-    <Suspense fallback={<ShellLoading />}>
+    <Suspense fallback={<ShellLoading loading={common.loading} />}>
       <SignedInShell>{children}</SignedInShell>
     </Suspense>
   );
@@ -44,7 +47,7 @@ async function SignedInShell({ children }: { children: ReactNode }) {
   const unread = await unreadCount(viewer);
   // Only pages that exist for this role: Debts is the owner's; Settings holds People & invites
   // for the owner, everyone else has Profile.
-  const nav = (await getMessages()).nav;
+  const [locale, { nav, shell, common }] = await Promise.all([getLocale(), getMessages()]);
   // Reports shows household figures, so not to a guest.
   const items: NavItem[] = [
     { href: '/', label: nav.home },
@@ -66,15 +69,17 @@ async function SignedInShell({ children }: { children: ReactNode }) {
             <Link href="/" className="-my-2.5 flex min-h-11 w-fit items-center font-semibold text-ink no-underline hover:underline">
               My Expenses
             </Link>
-            <p className="truncate text-sm text-muted">Signed in as {viewer.displayName}</p>
+            <p className="truncate text-sm text-muted">{fmt(shell.signedInAs, { name: viewer.displayName })}</p>
           </div>
           <div className="flex flex-wrap items-center gap-x-1">
             <MainNav items={items} label={nav.label} variant="top" />
             {/* Guests get no budget alerts, so no bell. */}
-            {viewer.role !== 'guest' && <NotificationBell unread={unread} />}
+            {viewer.role !== 'guest' && <NotificationBell unread={unread} locale={locale} />}
             <ThemeToggle />
             <form action={signOut}>
-              <SubmitButton variant="quiet" className="whitespace-nowrap">Sign out</SubmitButton>
+              <SubmitButton variant="quiet" className="whitespace-nowrap">
+                {common.signOut}
+              </SubmitButton>
             </form>
           </div>
         </div>
@@ -85,7 +90,7 @@ async function SignedInShell({ children }: { children: ReactNode }) {
   );
 }
 
-function ShellLoading() {
+function ShellLoading({ loading }: { loading: string }) {
   return (
     <>
       <header className="border-b border-line bg-surface">
@@ -99,7 +104,7 @@ function ShellLoading() {
       </header>
       <main className="mx-auto w-full max-w-5xl px-page py-8">
         <p role="status" className="text-muted">
-          Loading…
+          {loading}
         </p>
       </main>
     </>

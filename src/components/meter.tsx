@@ -1,3 +1,6 @@
+import { fmt } from '@/i18n/format';
+import type { Locale } from '@/i18n/locale';
+import { messages } from '@/i18n/messages';
 import type { BudgetState } from '@/lib/budget-state';
 import { cx } from './cx';
 import { meterParts } from './meter-parts';
@@ -15,6 +18,8 @@ type MeterProps = {
    * hidden from assistive technology as a duplicate.
    */
   label?: string;
+  /** The language of the value read out with the label ("80% used"). */
+  locale?: Locale;
 };
 
 /**
@@ -22,7 +27,7 @@ type MeterProps = {
  * the dashboard and the AI budget, nowhere else. The fill is ink until the threshold,
  * amber when the state is tight, red when over (the colour comes from the state, never recomputed here).
  */
-export function Meter({ value, max, state, threshold, label }: MeterProps) {
+export function Meter({ value, max, state, threshold, label, locale = 'en' }: MeterProps) {
   const { fillPct, thresholdPct } = meterParts(value, max, threshold);
   const usedPct = max > 0 ? Math.round((value / max) * 100) : 0;
 
@@ -33,7 +38,7 @@ export function Meter({ value, max, state, threshold, label }: MeterProps) {
         'aria-valuemin': 0,
         'aria-valuemax': 100,
         'aria-valuenow': Math.round(fillPct),
-        'aria-valuetext': `${usedPct}% used`,
+        'aria-valuetext': fmt(messages[locale].shell.meterUsed, { percent: usedPct }),
       }
     : { 'aria-hidden': true };
 

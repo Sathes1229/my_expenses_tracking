@@ -1,5 +1,7 @@
+import { createElement, type ReactElement, type ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 import { fmt } from '@/i18n/format';
+import { fmtNodes } from '@/i18n/format-nodes';
 import { messages } from '@/i18n/messages';
 
 /** Every leaf of a catalog as [path, text]. */
@@ -37,6 +39,25 @@ describe('message catalogs', () => {
     for (const [path, text] of [...en, ...ms]) {
       expect(text as string, path).not.toMatch(/[–—]/);
     }
+  });
+});
+
+describe('fmtNodes', () => {
+  const pieces = (nodes: ReactNode[]) => nodes.map((node) => (node as ReactElement<{ children: ReactNode }>).props.children);
+
+  it('puts elements where the placeholders are, in the order the sentence has them', () => {
+    const spent = createElement('span', null, 'RM 5.00');
+    const total = createElement('span', null, 'RM 9.00');
+    expect(pieces(fmtNodes('{spent} spent of {total}', { spent, total }))).toEqual([spent, ' spent of ', total]);
+    expect(pieces(fmtNodes('{spent} dibelanjakan daripada bajet {total}', { spent, total }))).toEqual([
+      spent,
+      ' dibelanjakan daripada bajet ',
+      total,
+    ]);
+  });
+
+  it('leaves a placeholder in place when its value is missing', () => {
+    expect(pieces(fmtNodes('Hi {name}', {}))).toEqual(['Hi ', '{name}']);
   });
 });
 

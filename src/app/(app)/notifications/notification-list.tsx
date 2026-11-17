@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLocale, useMessages } from '@/i18n/client';
 import { formatWhen } from '@/lib/time';
 import { markNotificationsReadAction } from './actions';
 
@@ -13,6 +14,8 @@ export type NotificationRow = { id: string; text: string; createdAt: number; rea
  */
 export function NotificationList({ rows }: { rows: NotificationRow[] }) {
   const [shown] = useState(rows);
+  const locale = useLocale();
+  const t = useMessages().notifications;
   const hasUnread = shown.some((n) => !n.read);
 
   useEffect(() => {
@@ -24,11 +27,11 @@ export function NotificationList({ rows }: { rows: NotificationRow[] }) {
       {shown.map((n) => (
         <li key={n.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3">
           <p className={n.read ? 'text-muted' : 'font-semibold text-ink'}>
-            {!n.read && <span className="mr-2 font-semibold text-ink">New.</span>}
+            {!n.read && <span className="mr-2 font-semibold text-ink">{t.new}</span>}
             {n.text}
           </p>
           <time dateTime={new Date(n.createdAt).toISOString()} className="text-sm text-muted">
-            {formatWhen(new Date(n.createdAt))}
+            {formatWhen(new Date(n.createdAt), locale)}
           </time>
         </li>
       ))}

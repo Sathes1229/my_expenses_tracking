@@ -12,9 +12,9 @@ export type Dashboard = {
   totals?: { spentSen: number; allocatedSen: number };
   /**
    * Absent for guests. Largest first, one entry per budget id; includes Uncategorised (id null) and
-   * archived budgets, named "(archived)", when they have spending.
+   * archived budgets, marked `archived`, when they have spending. Pages word both in the viewer's language.
    */
-  byBudget?: { id: string | null; name: string; spentSen: number }[];
+  byBudget?: { id: string | null; name: string; archived: boolean; spentSen: number }[];
   /** Owner only. */
   debts?: { outstandingSen: number; people: { name: string; outstandingSen: number }[] };
 };
@@ -38,14 +38,14 @@ export async function getDashboard(viewer: Viewer, month: string): Promise<Dashb
   // is only the active budgets', since an archived budget has none for the month. Grouped by id, not
   // name: an archived budget and a new one may share a name, and each bar must match its own budget.
   const active = new Set(budgets.map((b) => b.id));
-  const spent = new Map<string | null, { name: string; spentSen: number }>();
+  const spent = new Map<string | null, { name: string; archived: boolean; spentSen: number }>();
   for (const row of rows) {
     const group = spent.get(row.budgetId);
     if (group) {
       group.spentSen += row.totalSen;
     } else {
       const archived = row.budgetId !== null && !active.has(row.budgetId);
-      spent.set(row.budgetId, { name: archived ? `${row.budgetName} (archived)` : row.budgetName, spentSen: row.totalSen });
+      spent.set(row.budgetId, { name: row.budgetName, archived, spentSen: row.totalSen });
     }
   }
   dashboard.totals = {

@@ -88,9 +88,9 @@ describe('spending by budget', () => {
     await createBudget(owner, { name: 'Petrol', allocationSen: 30000 });
     const m = await getDashboard(member, '2026-11');
     expect(m.byBudget).toEqual([
-      { id: groceries, name: 'Groceries', spentSen: 4000 },
-      { id: dining, name: 'Dining', spentSen: 1500 },
-      { id: null, name: 'Uncategorised', spentSen: 500 },
+      { id: groceries, name: 'Groceries', archived: false, spentSen: 4000 },
+      { id: dining, name: 'Dining', archived: false, spentSen: 1500 },
+      { id: null, name: 'Uncategorised', archived: false, spentSen: 500 },
     ]);
     expect(m.totals?.allocatedSen).toBe(130000);
   });
@@ -99,7 +99,7 @@ describe('spending by budget', () => {
     await archiveBudget(owner, dining);
     const o = await getDashboard(owner, '2026-11');
     expect(o.budgets.map((b) => b.name)).toEqual(['Groceries']);
-    expect(o.byBudget).toContainEqual({ id: dining, name: 'Dining (archived)', spentSen: 1500 });
+    expect(o.byBudget).toContainEqual({ id: dining, name: 'Dining', archived: true, spentSen: 1500 });
     expect(o.totals).toEqual({ spentSen: 6000, allocatedSen: 80000 });
   });
 
@@ -111,10 +111,10 @@ describe('spending by budget', () => {
     // The bar for the new Dining shows what its own budget row shows as spent.
     expect(o.budgets.find((b) => b.id === newDining)?.spentSen).toBe(1200);
     expect(o.byBudget).toEqual([
-      { id: groceries, name: 'Groceries', spentSen: 4000 },
-      { id: dining, name: 'Dining (archived)', spentSen: 1500 },
-      { id: newDining, name: 'Dining', spentSen: 1200 },
-      { id: null, name: 'Uncategorised', spentSen: 500 },
+      { id: groceries, name: 'Groceries', archived: false, spentSen: 4000 },
+      { id: dining, name: 'Dining', archived: true, spentSen: 1500 },
+      { id: newDining, name: 'Dining', archived: false, spentSen: 1200 },
+      { id: null, name: 'Uncategorised', archived: false, spentSen: 500 },
     ]);
   });
 });
@@ -124,7 +124,7 @@ describe('the month', () => {
     const m = await getDashboard(member, '2026-10');
     expect(m.month).toBe('2026-10');
     expect(m.totals?.spentSen).toBe(9900);
-    expect(m.byBudget).toEqual([{ id: groceries, name: 'Groceries', spentSen: 9900 }]);
+    expect(m.byBudget).toEqual([{ id: groceries, name: 'Groceries', archived: false, spentSen: 9900 }]);
     expect(m.recent.map((t) => t.merchant)).toEqual(['Old shop']);
   });
 
