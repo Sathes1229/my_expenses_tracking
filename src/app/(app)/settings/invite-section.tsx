@@ -7,6 +7,9 @@ import { Dialog } from '@/components/dialog';
 import { EmptyState } from '@/components/empty-state';
 import { FormAlert } from '@/components/form-alert';
 import { SubmitButton } from '@/components/submit-button';
+import { useMessages } from '@/i18n/client';
+import { fmt } from '@/i18n/format';
+import type { Messages } from '@/i18n/messages';
 import type { InviteListStatus, InviteRole } from '@/lib/auth/invites';
 import { initialFormState } from '@/lib/form-state';
 import { createInviteAction, revokeInviteAction, type InviteFormState } from './actions';
@@ -14,22 +17,21 @@ import { createInviteAction, revokeInviteAction, type InviteFormState } from './
 /** One invite as the page shows it; dates are already written out by the server. */
 export type InviteRow = { id: string; role: InviteRole; status: InviteListStatus; created: string; expires: string };
 
-const ROLE_WORD = { member: 'Member', guest: 'Guest' } as const;
-
-function statusText(invite: InviteRow): string {
+function statusText(invite: InviteRow, t: Messages['invites']['status']): string {
   switch (invite.status) {
     case 'open':
-      return `Open until ${invite.expires}`;
+      return fmt(t.open, { date: invite.expires });
     case 'expired':
-      return `Expired ${invite.expires}`;
+      return fmt(t.expired, { date: invite.expires });
     case 'used':
-      return 'Used';
+      return t.used;
     case 'revoked':
-      return 'Revoked';
+      return t.revoked;
   }
 }
 
 export function InviteSection({ invites }: { invites: InviteRow[] }) {
+  const t = useMessages().invites;
   // Revoking removes the row's button, so focus moves to the sentence that says it worked.
   const [shown, setShown] = useState(invites);
   // A new object per revoke, so the focus effect runs once for each.
@@ -39,7 +41,7 @@ export function InviteSection({ invites }: { invites: InviteRow[] }) {
     const revoked = invites.some(
       (i) => i.status === 'revoked' && shown.some((s) => s.id === i.id && s.status === 'open'),
     );
-    if (revoked) setNotice({ text: 'Invite revoked. Its link no longer works.' });
+    if (revoked) setNotice({ text: t.revoked });
   }
   const noticeRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
@@ -49,23 +51,23 @@ export function InviteSection({ invites }: { invites: InviteRow[] }) {
   return (
     <>
       <CreateInvite />
-      <h3 className="mt-8 font-semibold text-ink">Invite links</h3>
+      <h3 className="mt-8 font-semibold text-ink">{t.linksHeading}</h3>
       <p ref={noticeRef} tabIndex={-1} role="status" className="min-h-6 text-sm font-medium text-ink">
         {notice?.text}
       </p>
       {invites.length === 0 ? (
-        <EmptyState title="No invites yet.">Links you create show here, with whether each one was used.</EmptyState>
+        <EmptyState title={t.emptyTitle}>{t.emptyBody}</EmptyState>
       ) : (
         <ul className="divide-y divide-line rounded-surface border border-line bg-surface">
           {invites.map((invite) => (
             <li key={invite.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3">
               <div className="min-w-0 py-1">
-                <p className="font-medium text-ink">{ROLE_WORD[invite.role]} invite</p>
+                <p className="font-medium text-ink">{t.roleInvite[invite.role]}</p>
                 <p className="text-sm text-muted">
-                  {statusText(invite)}
+                  {statusText(invite, t.status)}
                   <span aria-hidden="true"> · </span>
                   <span className="sr-only">, </span>
-                  made {invite.created}
+                  {fmt(t.made, { date: invite.created })}
                 </p>
               </div>
               {invite.status === 'open' && <RevokeInvite invite={invite} />}
@@ -111,16 +113,17 @@ function CreateInvite() {
     (prev, formData) => createInviteAction({ attempt: prev.attempt }, formData),
     initialFormState,
   );
+  const { common, settings, invites: t } = useMessages();
   const roleError = state.fieldErrors?.role;
 
   return (
     <div className="mt-4 rounded-surface border border-line bg-surface p-4">
       <form action={action} noValidate className="flex flex-col gap-4">
         <fieldset aria-describedby={roleError ? 'invite-role-error' : undefined}>
-          <legend className="text-sm font-medium text-ink">Who is the invite for?</legend>
+          <legend className="text-sm font-medium text-ink">{t.whoFor}</legend>
           {roleError && (
             <p id="invite-role-error" className="mt-1.5 text-sm font-medium text-danger">
-              <span className="sr-only">Error: </span>
+              <span className="sr-only">{common.errorPrefix} </span>
               {roleError}
             </p>
           )}
@@ -128,25 +131,25 @@ function CreateInvite() {
             {/* The form resets after each submit; it comes back with the last role chosen. */}
             <RoleChoice
               value="member"
-              title="Member"
-              detail="For family. Sees all household spending."
+              title={settings.roles.member}
+              detail={t.memberDetail}
               defaultChecked={state.role !== 'guest'}
             />
             <RoleChoice
               value="guest"
-              title="Guest"
-              detail="For friends. Sees budget names and their own entries."
+              title={settings.roles.guest}
+              detail={t.guestDetail}
               defaultChecked={state.role === 'guest'}
             />
           </div>
         </fieldset>
-        <SubmitButton className="self-start">Create invite link</SubmitButton>
+        <SubmitButton className="self-start">{t.create}</SubmitButton>
       </form>
       {state.link && state.role && (
         <div className="mt-5 border-t border-line pt-4">
           <CopyField
-            label={`New ${state.role} invite link`}
-            hint="Send it to the person yourself. It works once, for 7 days. This is the only time it is shown."
+            label={fmt(t.newLink, { role: settings.roleWords[state.role] })}
+            hint={t.linkHint}
             value={state.link}
             autoFocus
           />
@@ -158,13 +161,14 @@ function CreateInvite() {
 
 function RevokeInvite({ invite }: { invite: InviteRow }) {
   const [open, setOpen] = useState(false);
+  const t = useMessages().invites;
   return (
     <>
       <Button variant="quiet" className="-mx-3" onClick={() => setOpen(true)}>
-        Revoke
+        {t.revoke}
         <span className="sr-only">
           {' '}
-          ({ROLE_WORD[invite.role]} invite made {invite.created})
+          ({fmt(t.revokeDetail, { invite: t.roleInvite[invite.role], date: invite.created })})
         </span>
       </Button>
       {open && <RevokeDialog invite={invite} onClose={() => setOpen(false)} />}
@@ -174,22 +178,22 @@ function RevokeInvite({ invite }: { invite: InviteRow }) {
 
 function RevokeDialog({ invite, onClose }: { invite: InviteRow; onClose: () => void }) {
   const [state, action] = useActionState(revokeInviteAction, initialFormState);
+  const { settings, invites: t } = useMessages();
   // Closing the native dialog first lets the browser put focus back on the Revoke button.
   const [shown, setShown] = useState(true);
   return (
-    <Dialog open={shown} onClose={onClose} title="Revoke this invite?">
+    <Dialog open={shown} onClose={onClose} title={t.revokeTitle}>
       <form action={action} className="flex flex-col gap-4">
         <p className="text-muted">
-          The {invite.role} invite link made {invite.created} stops working, so nobody can join with it. You
-          can create a new one at any time.
+          {fmt(t.revokeBody, { role: settings.roleWords[invite.role], date: invite.created })}
         </p>
         <FormAlert state={state} />
         <input type="hidden" name="inviteId" value={invite.id} />
         <div className="mt-2 flex flex-wrap justify-end gap-3">
           <Button variant="secondary" onClick={() => setShown(false)}>
-            Keep it
+            {t.keep}
           </Button>
-          <SubmitButton variant="danger">Revoke invite</SubmitButton>
+          <SubmitButton variant="danger">{t.revokeConfirm}</SubmitButton>
         </div>
       </form>
     </Dialog>

@@ -1,3 +1,6 @@
+import type { Locale } from '@/i18n/locale';
+import { messages } from '@/i18n/messages';
+
 // Money is whole sen (integer). Parsing and formatting use strings and integers only.
 
 const AMOUNT = /^(?:rm)?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?$/;
@@ -24,10 +27,10 @@ export function formatRM(sen: number): string {
 
 /**
  * The AI budget's US dollars, from whole micro-USD, to the nearest cent: "US$1.02". An amount
- * that rounds to nothing reads "under US$0.01", so usage never looks like zero.
+ * that rounds to nothing reads "under US$0.01" (in the given language), so usage never looks like zero.
  */
-export function formatUsd(microUsd: number): string {
+export function formatUsd(microUsd: number, locale: Locale = 'en'): string {
   const cents = Math.round(microUsd / 10_000);
-  if (microUsd > 0 && cents === 0) return 'under US$0.01';
+  if (microUsd > 0 && cents === 0) return messages[locale].common.underOneCent;
   return `US$${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
 }

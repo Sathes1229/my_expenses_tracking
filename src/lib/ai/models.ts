@@ -2,12 +2,16 @@ import { ValidationError } from '@/lib/errors';
 
 export type Provider = 'anthropic' | 'openai' | 'deepseek';
 
+export type ModelTier = 'cheapest' | 'balanced' | 'stronger' | 'strongest';
+
 export type ModelInfo = {
   /** The exact string the provider's API accepts. */
   id: string;
   provider: Provider;
-  /** What the owner sees in the picker. */
+  /** The model's own name, shown in the picker with its tier. */
   label: string;
+  /** How it compares with the provider's other models; the picker says it in the viewer's language. */
+  tier?: ModelTier;
   /** Whether the model can read an image (needed for receipts). */
   vision: boolean;
   inputUsdPerMTok: number;
@@ -39,13 +43,13 @@ export const PROVIDER_KEY_NAMES: Record<Provider, 'ANTHROPIC_API_KEY' | 'OPENAI_
 // Standard prices for prompts of ordinary length. Where a provider charges a peak and an
 // off-peak rate (DeepSeek), the peak rate is used, so the daily budget never undercounts.
 export const MODELS: ModelInfo[] = [
-  { id: 'claude-haiku-5-5', provider: 'anthropic', label: 'Claude Haiku 5.5 (cheapest)', vision: true, inputUsdPerMTok: 0.1, outputUsdPerMTok: 0.5 },
-  { id: 'claude-sonnet-5-5', provider: 'anthropic', label: 'Claude Sonnet 5.5 (balanced)', vision: true, inputUsdPerMTok: 2, outputUsdPerMTok: 10 },
-  { id: 'claude-opus-5-5', provider: 'anthropic', label: 'Claude Opus 5.5 (strongest)', vision: true, inputUsdPerMTok: 4, outputUsdPerMTok: 20 },
-  { id: 'gpt-6-luna', provider: 'openai', label: 'GPT-6 Luna (cheapest)', vision: true, inputUsdPerMTok: 0.1, outputUsdPerMTok: 0.5 },
-  { id: 'gpt-6.1-sol', provider: 'openai', label: 'GPT-6.1 Sol (stronger)', vision: true, inputUsdPerMTok: 2, outputUsdPerMTok: 10 },
-  { id: 'deepseek-flash', provider: 'deepseek', label: 'DeepSeek Flash (cheapest)', vision: false, inputUsdPerMTok: 0.3, outputUsdPerMTok: 1.2 },
-  { id: 'deepseek-v4-pro', provider: 'deepseek', label: 'DeepSeek V4 Pro (stronger)', vision: false, inputUsdPerMTok: 1.32, outputUsdPerMTok: 3.96 },
+  { id: 'claude-haiku-5-5', provider: 'anthropic', label: 'Claude Haiku 5.5', tier: 'cheapest', vision: true, inputUsdPerMTok: 0.1, outputUsdPerMTok: 0.5 },
+  { id: 'claude-sonnet-5-5', provider: 'anthropic', label: 'Claude Sonnet 5.5', tier: 'balanced', vision: true, inputUsdPerMTok: 2, outputUsdPerMTok: 10 },
+  { id: 'claude-opus-5-5', provider: 'anthropic', label: 'Claude Opus 5.5', tier: 'strongest', vision: true, inputUsdPerMTok: 4, outputUsdPerMTok: 20 },
+  { id: 'gpt-6-luna', provider: 'openai', label: 'GPT-6 Luna', tier: 'cheapest', vision: true, inputUsdPerMTok: 0.1, outputUsdPerMTok: 0.5 },
+  { id: 'gpt-6.1-sol', provider: 'openai', label: 'GPT-6.1 Sol', tier: 'stronger', vision: true, inputUsdPerMTok: 2, outputUsdPerMTok: 10 },
+  { id: 'deepseek-flash', provider: 'deepseek', label: 'DeepSeek Flash', tier: 'cheapest', vision: false, inputUsdPerMTok: 0.3, outputUsdPerMTok: 1.2 },
+  { id: 'deepseek-v4-pro', provider: 'deepseek', label: 'DeepSeek V4 Pro', tier: 'stronger', vision: false, inputUsdPerMTok: 1.32, outputUsdPerMTok: 3.96 },
 ];
 
 export function findModel(modelId: string): ModelInfo | undefined {

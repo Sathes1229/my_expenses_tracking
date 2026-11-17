@@ -3,29 +3,13 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Screens still to be moved into the message catalogs. Each translation task removes its files;
- * at the end this list is empty and every screen reads its copy from src/i18n.
+ * Screens still to be moved into the message catalogs. The translation tasks emptied it: every
+ * screen reads its copy from src/i18n, and a file added here again fails the check below.
  */
-const PENDING: string[] = [
-  'src/app/(app)/assistant/chat.tsx',
-  'src/app/(app)/assistant/error.tsx',
-  'src/app/(app)/assistant/page.tsx',
-  'src/app/(app)/debts/debt-forms.tsx',
-  'src/app/(app)/debts/debt-list.tsx',
-  'src/app/(app)/debts/error.tsx',
-  'src/app/(app)/debts/not-found.tsx',
-  'src/app/(app)/debts/page.tsx',
-  'src/app/(app)/settings/ai/ai-forms.tsx',
-  'src/app/(app)/settings/ai/page.tsx',
-  'src/app/(app)/settings/error.tsx',
-  'src/app/(app)/settings/invite-section.tsx',
-  'src/app/(app)/settings/page.tsx',
-  'src/app/(app)/settings/people-list.tsx',
-  'src/app/(app)/settings/profile/profile-forms.tsx',
-];
+const PENDING: string[] = [];
 
 /** Text that is the same in both languages. */
-const ALLOWED = new Set(['My Expenses', 'RM', 'QR', 'Developed by Sathes']);
+const ALLOWED = new Set(['My Expenses', 'RM', 'QR', 'Developed by Sathes', '.env']);
 
 const ROOT = join(__dirname, '..', '..');
 const SCAN = ['src/app', 'src/components'];
@@ -76,6 +60,10 @@ function hits(file: string): string[] {
 describe('screen copy', () => {
   it('lists only files that exist', () => {
     for (const file of PENDING) expect(existsSync(join(ROOT, file)), file).toBe(true);
+  });
+
+  it('has no screens left to move', () => {
+    expect(PENDING).toEqual([]);
   });
 
   it('comes from the message catalogs, not from the screens', () => {

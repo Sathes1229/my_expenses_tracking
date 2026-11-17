@@ -3,34 +3,29 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { PageHeader } from '@/components/page-header';
+import { getLocale, getMessages } from '@/i18n/server';
 import { listInvites } from '@/lib/auth/invites';
 import { listPeople } from '@/lib/auth/people';
 import { requireViewer } from '@/lib/auth/viewer';
-import { TZ } from '@/lib/time';
+import { formatWhen } from '@/lib/time';
 import { InviteSection, type InviteRow } from './invite-section';
 import { PeopleList } from './people-list';
 
-export const metadata: Metadata = { title: 'Settings | My Expenses' };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getMessages()).settings.pageTitle };
+}
 
 // Blocks on the session read, like the (app) layout.
 export const instant = false;
 
-const when = new Intl.DateTimeFormat('en-GB', {
-  timeZone: TZ,
-  day: 'numeric',
-  month: 'short',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
-
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const t = (await getMessages()).settings;
   return (
     <div className="max-w-3xl">
       <Suspense
         fallback={
           <p role="status" className="text-muted">
-            Loading people and invites…
+            {t.loading}
           </p>
         }
       >
@@ -46,27 +41,33 @@ async function OwnerSettings() {
   // Members and guests have only their profile here.
   if (viewer.role !== 'owner') redirect('/settings/profile');
 
-  const [people, invites] = await Promise.all([listPeople(viewer), listInvites(viewer)]);
+  const [people, invites, locale, messages] = await Promise.all([
+    listPeople(viewer),
+    listInvites(viewer),
+    getLocale(),
+    getMessages(),
+  ]);
+  const t = messages.settings;
   const rows: InviteRow[] = invites.map((invite) => ({
     id: invite.id,
     role: invite.role,
     status: invite.status,
-    created: when.format(invite.createdAt),
-    expires: when.format(invite.expiresAt),
+    created: formatWhen(new Date(invite.createdAt), locale),
+    expires: formatWhen(new Date(invite.expiresAt), locale),
   }));
 
   return (
     <>
       <PageHeader
-        title="Settings"
+        title={t.title}
         action={
           <>
             {/* A two-letter label: the minimum width keeps it a 44px target. */}
             <Link href="/settings/ai" className="inline-flex min-h-11 min-w-11 items-center justify-center px-2">
-              AI
+              {t.ai}
             </Link>
             <Link href="/settings/profile" className="inline-flex min-h-11 items-center px-2">
-              Your profile
+              {t.yourProfile}
             </Link>
           </>
         }
@@ -76,12 +77,9 @@ async function OwnerSettings() {
       </section>
       <section aria-labelledby="invites-heading" className="mt-12">
         <h2 id="invites-heading" className="text-lg font-semibold text-ink">
-          Invites
+          {messages.invites.heading}
         </h2>
-        <p className="mt-1 text-muted">
-          An invite is a link that creates one account. No message is sent: you share the link yourself, for
-          example on WhatsApp.
-        </p>
+        <p className="mt-1 text-muted">{messages.invites.intro}</p>
         <InviteSection invites={rows} />
       </section>
     </>

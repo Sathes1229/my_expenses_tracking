@@ -7,30 +7,37 @@ import { Dialog } from '@/components/dialog';
 import { EmptyState } from '@/components/empty-state';
 import { FormAlert } from '@/components/form-alert';
 import { SubmitButton } from '@/components/submit-button';
+import { useMessages } from '@/i18n/client';
+import { fmt } from '@/i18n/format';
+import type { Messages } from '@/i18n/messages';
 import type { Person } from '@/lib/auth/people';
 import { initialFormState } from '@/lib/form-state';
 import { changeRoleAction, removePersonAction, resetPasswordAction, type ResetFormState } from './actions';
 
-const ROLE_WORD = { owner: 'Owner', member: 'Member', guest: 'Guest' } as const;
-
 type Notice = { text: string; moveFocus: boolean };
 
 /** What changed between two versions of the list, said in a sentence. */
-function describeChange(before: Person[], after: Person[]): Notice | null {
+function describeChange(before: Person[], after: Person[], messages: Messages): Notice | null {
+  const t = messages.people;
   const removed = before.find((p) => !after.some((q) => q.id === p.id));
-  if (removed) return { text: `${removed.displayName} was removed.`, moveFocus: true };
+  if (removed) return { text: fmt(t.removed, { name: removed.displayName }), moveFocus: true };
   const changed = after.find((p) => before.some((q) => q.id === p.id && q.role !== p.role));
-  if (changed) return { text: `${changed.displayName} is now a ${changed.role}.`, moveFocus: false };
+  if (changed) {
+    const role = messages.settings.roleWords[changed.role];
+    return { text: fmt(t.nowRole, { name: changed.displayName, role }), moveFocus: false };
+  }
   return null;
 }
 
 export function PeopleList({ people }: { people: Person[] }) {
+  const messages = useMessages();
+  const t = messages.people;
   // The list comes fresh from the server after each change; compare with the last one to say what happened.
   const [shown, setShown] = useState(people);
   const [notice, setNotice] = useState<Notice | null>(null);
   if (people !== shown) {
     setShown(people);
-    const change = describeChange(shown, people);
+    const change = describeChange(shown, people, messages);
     if (change) setNotice(change);
   }
 
@@ -45,11 +52,9 @@ export function PeopleList({ people }: { people: Person[] }) {
   return (
     <>
       <h2 id="people-heading" className="text-lg font-semibold text-ink">
-        People
+        {t.heading}
       </h2>
-      <p className="mt-1 text-muted">
-        Members see all household spending. Guests see budget names and only their own entries.
-      </p>
+      <p className="mt-1 text-muted">{t.intro}</p>
       <p ref={noticeRef} tabIndex={-1} role="status" className="mt-3 min-h-6 text-sm font-medium text-ink">
         {notice?.text}
       </p>
@@ -60,9 +65,7 @@ export function PeopleList({ people }: { people: Person[] }) {
       </ul>
       {others.length === 0 && (
         <div className="mt-4">
-          <EmptyState title="No one else uses the app yet.">
-            Create an invite below for family (Member) or friends (Guest).
-          </EmptyState>
+          <EmptyState title={t.noOthersTitle}>{t.noOthersBody}</EmptyState>
         </div>
       )}
     </>
@@ -70,18 +73,19 @@ export function PeopleList({ people }: { people: Person[] }) {
 }
 
 function PersonRow({ person }: { person: Person }) {
+  const { settings, people: t } = useMessages();
   const isOwner = person.role === 'owner';
   return (
     <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
       <div className="min-w-0 py-1">
         <p className="font-medium break-words text-ink">
           {person.displayName}
-          {isOwner && <span className="font-normal text-muted"> (you)</span>}
+          {isOwner && <span className="font-normal text-muted">{` ${t.you}`}</span>}
         </p>
         <p className="text-sm break-all text-muted">
-          {ROLE_WORD[person.role]}
+          {settings.roles[person.role]}
           <span aria-hidden="true"> · </span>
-          <span className="sr-only">, username </span>
+          <span className="sr-only">{`, ${t.username} `}</span>
           {person.username}
         </p>
       </div>
@@ -103,12 +107,13 @@ function RoleForm({ person }: { person: Person }) {
 
 function MakeMember({ person }: { person: Person }) {
   const [state, action] = useActionState(changeRoleAction, initialFormState);
+  const t = useMessages().people;
   return (
     <form action={action}>
       <input type="hidden" name="userId" value={person.id} />
       <input type="hidden" name="role" value="member" />
       <SubmitButton variant="quiet">
-        Make member
+        {t.makeMember}
         <span className="sr-only"> ({person.displayName})</span>
       </SubmitButton>
       {state.message && (
@@ -122,10 +127,11 @@ function MakeMember({ person }: { person: Person }) {
 
 function MakeGuest({ person }: { person: Person }) {
   const [open, setOpen] = useState(false);
+  const t = useMessages().people;
   return (
     <>
       <Button variant="quiet" onClick={() => setOpen(true)}>
-        Make guest
+        {t.makeGuest}
         <span className="sr-only"> ({person.displayName})</span>
       </Button>
       {open && <MakeGuestDialog person={person} onClose={() => setOpen(false)} />}
@@ -136,23 +142,21 @@ function MakeGuest({ person }: { person: Person }) {
 function MakeGuestDialog({ person, onClose }: { person: Person; onClose: () => void }) {
   const [state, action] = useActionState(changeRoleAction, initialFormState);
   const [shown, setShown] = useState(true);
-  const name = person.displayName;
+  const t = useMessages().people;
+  const name = { name: person.displayName };
   // On success the row turns into a guest's, and this dialog leaves the page with the member's button.
   return (
-    <Dialog open={shown} onClose={onClose} title={`Make ${name} a guest?`}>
+    <Dialog open={shown} onClose={onClose} title={fmt(t.makeGuestTitle, name)}>
       <form action={action} className="flex flex-col gap-4">
-        <p className="text-muted">
-          {name} will see budget names and only their own entries. Their assistant conversation is deleted,
-          and that cannot be undone.
-        </p>
+        <p className="text-muted">{fmt(t.makeGuestBody, name)}</p>
         <FormAlert state={state} />
         <input type="hidden" name="userId" value={person.id} />
         <input type="hidden" name="role" value="guest" />
         <div className="mt-2 flex flex-wrap justify-end gap-3">
           <Button variant="secondary" onClick={() => setShown(false)}>
-            Keep {name} a member
+            {fmt(t.keepMember, name)}
           </Button>
-          <SubmitButton variant="danger">Make {name} a guest</SubmitButton>
+          <SubmitButton variant="danger">{fmt(t.makeGuestConfirm, name)}</SubmitButton>
         </div>
       </form>
     </Dialog>
@@ -166,10 +170,11 @@ function MakeGuestDialog({ person, onClose }: { person: Person; onClose: () => v
  */
 function ResetPassword({ person }: { person: Person }) {
   const [open, setOpen] = useState(false);
+  const t = useMessages().people;
   return (
     <>
       <Button variant="quiet" onClick={() => setOpen(true)}>
-        Reset password
+        {t.resetPassword}
         <span className="sr-only"> ({person.displayName})</span>
       </Button>
       {open && <ResetPasswordDialog person={person} onClose={() => setOpen(false)} />}
@@ -185,39 +190,34 @@ function ResetPasswordDialog({ person, onClose }: { person: Person; onClose: () 
   );
   const [shown, setShown] = useState(true);
   const close = () => setShown(false);
-  const name = person.displayName;
+  const { common, people: t } = useMessages();
+  const name = { name: person.displayName };
 
   if (state.tempPassword) {
     return (
-      <Dialog open={shown} onClose={onClose} title={`Temporary password for ${name}`}>
-        <p className="text-muted">
-          {name} is signed out everywhere. Give them this password. They choose their own the next time
-          they sign in. It is shown only now.
-        </p>
+      <Dialog open={shown} onClose={onClose} title={fmt(t.tempTitle, name)}>
+        <p className="text-muted">{fmt(t.tempBody, name)}</p>
         <div className="mt-4">
-          <CopyField label="Temporary password" value={state.tempPassword} mono autoFocus />
+          <CopyField label={t.tempLabel} value={state.tempPassword} mono autoFocus />
         </div>
         <div className="mt-4 flex justify-end">
-          <Button onClick={close}>Done</Button>
+          <Button onClick={close}>{t.done}</Button>
         </div>
       </Dialog>
     );
   }
 
   return (
-    <Dialog open={shown} onClose={onClose} title={`Reset ${name}'s password?`}>
+    <Dialog open={shown} onClose={onClose} title={fmt(t.resetTitle, name)}>
       <form action={action} className="flex flex-col gap-4">
-        <p className="text-muted">
-          {name} is signed out on every device and their current password stops working. You get a
-          temporary password to give them.
-        </p>
+        <p className="text-muted">{fmt(t.resetBody, name)}</p>
         <FormAlert state={state} />
         <input type="hidden" name="userId" value={person.id} />
         <div className="mt-2 flex flex-wrap justify-end gap-3">
           <Button variant="secondary" onClick={close}>
-            Cancel
+            {common.cancel}
           </Button>
-          <SubmitButton variant="danger">Reset password</SubmitButton>
+          <SubmitButton variant="danger">{t.resetPassword}</SubmitButton>
         </div>
       </form>
     </Dialog>
@@ -226,10 +226,11 @@ function ResetPasswordDialog({ person, onClose }: { person: Person; onClose: () 
 
 function RemovePerson({ person }: { person: Person }) {
   const [open, setOpen] = useState(false);
+  const t = useMessages().people;
   return (
     <>
       <Button variant="quiet" onClick={() => setOpen(true)}>
-        Remove
+        {t.remove}
         <span className="sr-only"> ({person.displayName})</span>
       </Button>
       {open && <RemoveDialog person={person} onClose={() => setOpen(false)} />}
@@ -240,22 +241,20 @@ function RemovePerson({ person }: { person: Person }) {
 function RemoveDialog({ person, onClose }: { person: Person; onClose: () => void }) {
   const [state, action] = useActionState(removePersonAction, initialFormState);
   const [shown, setShown] = useState(true);
-  const name = person.displayName;
+  const t = useMessages().people;
+  const name = { name: person.displayName };
   // On success the row, and this dialog with it, leaves the page; the list says who was removed.
   return (
-    <Dialog open={shown} onClose={onClose} title={`Remove ${name}?`}>
+    <Dialog open={shown} onClose={onClose} title={fmt(t.removeTitle, name)}>
       <form action={action} className="flex flex-col gap-4">
-        <p className="text-muted">
-          {name} is signed out now and can no longer sign in. The transactions they added stay, under their
-          name, so totals do not change.
-        </p>
+        <p className="text-muted">{fmt(t.removeBody, name)}</p>
         <FormAlert state={state} />
         <input type="hidden" name="userId" value={person.id} />
         <div className="mt-2 flex flex-wrap justify-end gap-3">
           <Button variant="secondary" onClick={() => setShown(false)}>
-            Keep {name}
+            {fmt(t.keep, name)}
           </Button>
-          <SubmitButton variant="danger">Remove {name}</SubmitButton>
+          <SubmitButton variant="danger">{fmt(t.removeConfirm, name)}</SubmitButton>
         </div>
       </form>
     </Dialog>

@@ -9,6 +9,10 @@ import { Dialog } from '@/components/dialog';
 import { EmptyState } from '@/components/empty-state';
 import { controlClass } from '@/components/field';
 import { SubmitButton } from '@/components/submit-button';
+import { useMessages } from '@/i18n/client';
+import { fmt } from '@/i18n/format';
+import { fmtNodes } from '@/i18n/format-nodes';
+import type { Messages } from '@/i18n/messages';
 import { initialFormState } from '@/lib/form-state';
 import { clearChatAction } from './actions';
 import { refuse, shown, startGate, withReading, type Availability, type ChatGate } from './availability';
@@ -18,17 +22,13 @@ export type ShownMessage = { id: string; role: 'user' | 'assistant'; content: st
 type Pending = { id: string; question: string; answer: string };
 type Problem = { text: string; signedOut?: boolean };
 
-const NOT_SENT = 'Your question could not be sent. Check the connection, then send it again.';
-const NO_ANSWER = 'The assistant could not answer just now. Your question is back in the box, so you can send it again.';
-
 /** What an error code from POST /api/chat means for the person asking. */
-function problemFor(code: unknown, maxChars: number): Problem {
-  if (code === 'provider_error') return { text: NO_ANSWER };
-  if (code === 'signed_out') return { text: 'You are signed out. Sign in again, then send your question.', signedOut: true };
-  if (code === 'invalid_message') {
-    return { text: `That question could not be sent. Keep it to ${maxChars.toLocaleString('en')} characters or fewer.` };
-  }
-  return { text: 'Your question could not be sent. Reload the page, then send it again.' };
+function problemFor(code: unknown, maxChars: number, t: Messages['assistant']['problems']): Problem {
+  if (code === 'provider_error') return { text: t.noAnswer };
+  if (code === 'signed_out') return { text: t.signedOut, signedOut: true };
+  // Malaysia groups thousands with commas in both languages: "2,000".
+  if (code === 'invalid_message') return { text: fmt(t.tooLong, { max: maxChars.toLocaleString('en') }) };
+  return { text: t.other };
 }
 
 /**
@@ -51,6 +51,7 @@ export function Chat({
   hint: string;
 }) {
   const router = useRouter();
+  const { common, assistant: t } = useMessages();
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState('');
   const [pending, setPending] = useState<Pending | null>(null);
@@ -108,7 +109,7 @@ export function Chat({
     if (pending) return;
     const question = draft.trim();
     if (!question) {
-      setFieldError('Type a question first.');
+      setFieldError(t.typeFirst);
       fieldRef.current?.focus();
       return;
     }
@@ -129,7 +130,7 @@ export function Chat({
         signal: controller.signal,
       });
     } catch {
-      if (!controller.signal.aborted) giveBack(question, { text: NOT_SENT });
+      if (!controller.signal.aborted) giveBack(question, { text: t.problems.notSent });
       return;
     }
 
@@ -141,7 +142,7 @@ export function Chat({
         setGate((g) => refuse(g, code === 'budget_used' ? 'used_up' : 'not_configured'));
         router.refresh(); // the budget line above the conversation
       } else {
-        giveBack(question, problemFor(code, maxChars));
+        giveBack(question, problemFor(code, maxChars, t.problems));
       }
       return;
     }
@@ -157,7 +158,7 @@ export function Chat({
       }
     } catch {
       // The server breaks the stream when the provider fails part way, and saves nothing.
-      if (!controller.signal.aborted) giveBack(question, { text: NO_ANSWER });
+      if (!controller.signal.aborted) giveBack(question, { text: t.problems.noAnswer });
       return;
     }
     // The question keeps its key, so only the answer is new to the log and only it is announced.
@@ -186,18 +187,18 @@ export function Chat({
       <section aria-labelledby={headingId} hidden={!showConversation} className="mt-10">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <h2 ref={headingRef} id={headingId} tabIndex={-1} className="text-lg font-semibold text-ink">
-            Conversation
+            {t.conversation}
           </h2>
           {messages.length > 0 && !pending && (
             <Button variant="secondary" onClick={() => setClearing(true)}>
-              Clear conversation
+              {t.clear}
             </Button>
           )}
         </div>
 
         {messages.length === 0 && !pending && (
           <div className="mt-3">
-            <EmptyState title="No questions yet.">{hint}</EmptyState>
+            <EmptyState title={t.noQuestions}>{hint}</EmptyState>
           </div>
         )}
 
@@ -215,7 +216,7 @@ export function Chat({
         {/* Outside the log on purpose: the words arrive here without being read out one by one. */}
         {pending && (
           <div className="mt-5">
-            <p className="text-sm font-medium text-muted">Assistant</p>
+            <p className="text-sm font-medium text-muted">{t.speakerAssistant}</p>
             {pending.answer ? (
               <p className="mt-1 break-words whitespace-pre-wrap text-ink">{pending.answer}</p>
             ) : (
@@ -224,13 +225,13 @@ export function Chat({
                   aria-hidden="true"
                   className="size-4 shrink-0 rounded-full border-2 border-current border-r-transparent motion-safe:animate-spin"
                 />
-                Writing an answer…
+                {t.writing}
               </p>
             )}
           </div>
         )}
         <p role="status" className="sr-only">
-          {pending ? 'The assistant is writing an answer.' : ''}
+          {pending ? t.writingStatus : ''}
         </p>
       </section>
 
@@ -246,17 +247,17 @@ export function Chat({
                 {problem.signedOut && (
                   <>
                     {' '}
-                    <Link href="/login">Sign in</Link>
+                    <Link href="/login">{common.signIn}</Link>
                   </>
                 )}
               </p>
             )}
             <label htmlFor={fieldId} className="text-sm font-medium text-ink">
-              Your question
+              {t.yourQuestion}
             </label>
             {fieldError && (
               <p id={`${fieldId}-error`} className="text-sm font-medium text-danger">
-                <span className="sr-only">Error: </span>
+                <span className="sr-only">{common.errorPrefix} </span>
                 {fieldError}
               </p>
             )}
@@ -279,10 +280,10 @@ export function Chat({
             />
             <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
               <p id={`${fieldId}-note`} className="text-sm text-muted">
-                Suggestions only, not professional financial advice.
+                {t.disclaimer}
               </p>
               <Button type="submit" pending={pending !== null}>
-                Send
+                {t.send}
               </Button>
             </div>
           </form>
@@ -306,10 +307,11 @@ export function Chat({
 }
 
 function Message({ role, content }: { role: ShownMessage['role']; content: string }) {
+  const t = useMessages().assistant;
   const mine = role === 'user';
   return (
     <li className={cx('max-w-[85%] min-w-0', mine ? 'self-end rounded-surface bg-sunken px-4 py-3' : 'self-start')}>
-      <p className="text-sm font-medium text-muted">{mine ? 'You' : 'Assistant'}</p>
+      <p className="text-sm font-medium text-muted">{mine ? t.speakerYou : t.speakerAssistant}</p>
       <p className="mt-1 break-words whitespace-pre-wrap text-ink">{content}</p>
     </li>
   );
@@ -326,32 +328,24 @@ function Unavailable({
   isOwner: boolean;
   unsent: string;
 }) {
+  const t = useMessages().assistant;
+  const link = <Link href="/settings/ai">{t.aiSettings}</Link>;
   return (
     <div ref={ref} tabIndex={-1} className="mt-8 rounded-surface border border-line-strong bg-surface px-5 py-4">
       {state === 'used_up' ? (
         <>
-          <p className="font-semibold text-ink">Today&apos;s assistant budget is used up. It will be available again tomorrow.</p>
-          {isOwner && (
-            <p className="mt-1 text-muted">
-              To let everyone carry on today, reset today&apos;s usage or raise the daily limit in{' '}
-              <Link href="/settings/ai">AI settings</Link>.
-            </p>
-          )}
+          <p className="font-semibold text-ink">{t.usedUp}</p>
+          {isOwner && <p className="mt-1 text-muted">{fmtNodes(t.usedUpOwner, { link })}</p>}
         </>
       ) : (
         <>
-          <p className="font-semibold text-ink">The assistant isn&apos;t set up yet.</p>
-          {isOwner && (
-            <p className="mt-1 text-muted">
-              Choose a model for the assistant in <Link href="/settings/ai">AI settings</Link>. If no AI key has been
-              added yet, that page shows how.
-            </p>
-          )}
+          <p className="font-semibold text-ink">{t.notSetUp}</p>
+          {isOwner && <p className="mt-1 text-muted">{fmtNodes(t.notSetUpOwner, { link })}</p>}
         </>
       )}
       {unsent && (
         <>
-          <p className="mt-4 text-sm font-medium text-muted">Your question was not sent:</p>
+          <p className="mt-4 text-sm font-medium text-muted">{t.unsent}</p>
           <p className="mt-1 break-words whitespace-pre-wrap text-ink">{unsent}</p>
         </>
       )}
@@ -361,21 +355,20 @@ function Unavailable({
 
 function ClearDialog({ onClose, onCleared }: { onClose: () => void; onCleared: () => void }) {
   const [state, action] = useActionState(clearChatAction, initialFormState);
+  const t = useMessages().assistant;
   const cleared = useRef(onCleared);
   useEffect(() => {
     if (state.done) cleared.current();
   }, [state.done]);
   return (
-    <Dialog open onClose={onClose} title="Clear this conversation?">
+    <Dialog open onClose={onClose} title={t.clearTitle}>
       <form action={action} className="flex flex-col gap-4">
-        <p className="text-muted">
-          Your questions and the answers are deleted. Nobody else can see them, and this cannot be undone.
-        </p>
+        <p className="text-muted">{t.clearBody}</p>
         <div className="mt-2 flex flex-wrap justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
-            Keep it
+            {t.keep}
           </Button>
-          <SubmitButton variant="danger">Clear conversation</SubmitButton>
+          <SubmitButton variant="danger">{t.clear}</SubmitButton>
         </div>
       </form>
     </Dialog>

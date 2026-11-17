@@ -8,6 +8,7 @@ import { FormAlert } from '@/components/form-alert';
 import { Select } from '@/components/select';
 import { SubmitButton } from '@/components/submit-button';
 import { useFocusFirstInvalid } from '@/components/use-focus-first-invalid';
+import { useMessages } from '@/i18n/client';
 import { initialFormState, type FormState } from '@/lib/form-state';
 import { resetUsageAction, saveBudgetAction, saveModelsAction } from './actions';
 
@@ -34,19 +35,20 @@ export function ModelsForm({
   receiptModel: string | null;
 }) {
   const [state, action] = useActionState(saveModelsAction, initialFormState);
+  const t = useMessages().ai;
   const formRef = useFocusFirstInvalid(state);
   const errors = state.fieldErrors;
   return (
     <form ref={formRef} action={action} noValidate className="flex flex-col gap-5">
       <FormAlert state={state} />
       <Select
-        label="Assistant"
-        hint="Answers questions about your spending."
+        label={t.assistantModel}
+        hint={t.assistantHint}
         name="chatModel"
         defaultValue={state.values?.chatModel ?? chatModel ?? ''}
         error={errors?.chatModel}
       >
-        <option value="">Not chosen</option>
+        <option value="">{t.notChosen}</option>
         {chatOptions.map((model) => (
           <option key={model.id} value={model.id}>
             {model.label}
@@ -54,13 +56,13 @@ export function ModelsForm({
         ))}
       </Select>
       <Select
-        label="Receipt reading"
-        hint="Reads a photo of a receipt. Only models that can read images are listed. DeepSeek cannot read images."
+        label={t.receiptModel}
+        hint={t.receiptHint}
         name="receiptModel"
         defaultValue={state.values?.receiptModel ?? receiptModel ?? ''}
         error={errors?.receiptModel}
       >
-        <option value="">Not chosen</option>
+        <option value="">{t.notChosen}</option>
         {receiptOptions.map((model) => (
           <option key={model.id} value={model.id}>
             {model.label}
@@ -68,8 +70,8 @@ export function ModelsForm({
         ))}
       </Select>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <SubmitButton>Save models</SubmitButton>
-        <Saved state={state} text="Models saved." />
+        <SubmitButton>{t.saveModels}</SubmitButton>
+        <Saved state={state} text={t.modelsSaved} />
       </div>
     </form>
   );
@@ -77,12 +79,13 @@ export function ModelsForm({
 
 export function BudgetForm({ dailyBudget }: { dailyBudget: string }) {
   const [state, action] = useActionState(saveBudgetAction, initialFormState);
+  const t = useMessages().ai;
   const formRef = useFocusFirstInvalid(state);
   return (
     <form ref={formRef} action={action} noValidate className="flex flex-col gap-5">
       <Field
-        label="Daily limit in US dollars"
-        hint="From 0.01 to 1000, for example 2.50."
+        label={t.limitLabel}
+        hint={t.limitHint}
         name="dailyBudget"
         inputMode="decimal"
         autoComplete="off"
@@ -91,8 +94,8 @@ export function BudgetForm({ dailyBudget }: { dailyBudget: string }) {
         error={state.fieldErrors?.dailyBudget}
       />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <SubmitButton>Save limit</SubmitButton>
-        <Saved state={state} text="Limit saved." />
+        <SubmitButton>{t.saveLimit}</SubmitButton>
+        <Saved state={state} text={t.limitSaved} />
       </div>
     </form>
   );
@@ -104,6 +107,7 @@ export function BudgetForm({ dailyBudget }: { dailyBudget: string }) {
  */
 export function ResetUsage({ canReset }: { canReset: boolean }) {
   const [state, action] = useActionState(resetUsageAction, initialFormState);
+  const t = useMessages().ai;
   // The dialog stays open until the action answers: each answer moves `attempt` on, which closes it.
   const [openedAt, setOpenedAt] = useState<number | null>(null);
   const open = openedAt === state.attempt;
@@ -116,24 +120,21 @@ export function ResetUsage({ canReset }: { canReset: boolean }) {
     <div className="flex flex-col items-start gap-2">
       {canReset && (
         <Button variant="secondary" onClick={() => setOpen(true)}>
-          Reset today&apos;s usage
+          {t.resetUsage}
         </Button>
       )}
       <p ref={doneRef} tabIndex={-1} role="status" className="text-sm text-muted">
-        {state.done ? "Today's usage was reset. Everyone can use the assistant again." : ''}
+        {state.done ? t.resetDone : ''}
       </p>
       {open && (
-        <Dialog open onClose={() => setOpen(false)} title="Reset today's usage?">
+        <Dialog open onClose={() => setOpen(false)} title={t.resetTitle}>
           <form action={action} className="flex flex-col gap-4">
-            <p className="text-muted">
-              What was used so far today stops counting toward the daily limit, so everyone can use the assistant
-              again. Your provider still bills what was used.
-            </p>
+            <p className="text-muted">{t.resetBody}</p>
             <div className="mt-2 flex flex-wrap justify-end gap-3">
               <Button variant="secondary" onClick={() => setOpen(false)}>
-                Keep it
+                {t.keep}
               </Button>
-              <SubmitButton>Reset usage</SubmitButton>
+              <SubmitButton>{t.resetConfirm}</SubmitButton>
             </div>
           </form>
         </Dialog>

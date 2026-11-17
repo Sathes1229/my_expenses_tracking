@@ -7,6 +7,8 @@ import { Field } from '@/components/field';
 import { FormAlert } from '@/components/form-alert';
 import { SubmitButton } from '@/components/submit-button';
 import { useFocusFirstInvalid } from '@/components/use-focus-first-invalid';
+import { useMessages } from '@/i18n/client';
+import { fmt } from '@/i18n/format';
 import { initialFormState, type FormState } from '@/lib/form-state';
 import { formatRM } from '@/lib/money';
 import {
@@ -52,6 +54,7 @@ function DebtForm({
   onClose: () => void;
 }) {
   const [state, action] = useActionState(initial ? updateDebtAction : createDebtAction, initialFormState);
+  const { common, debts: t } = useMessages();
   const formRef = useFocusFirstInvalid(state);
   const [shown, setShown] = useState(true);
   useCloseOnDone(state, () => setShown(false));
@@ -63,7 +66,7 @@ function DebtForm({
         <FormAlert state={state} />
         {initial && <input type="hidden" name="debtId" value={initial.id} />}
         <Field
-          label="Who you lent it to"
+          label={t.personName}
           name="personName"
           defaultValue={v('personName', initial?.personName ?? '')}
           error={errors?.personName}
@@ -71,7 +74,7 @@ function DebtForm({
           autoComplete="off"
         />
         <Field
-          label="Amount lent (RM)"
+          label={t.amount}
           name="amount"
           inputMode="decimal"
           autoComplete="off"
@@ -79,21 +82,21 @@ function DebtForm({
           error={errors?.amount}
         />
         <Field
-          label="Date lent"
+          label={t.lentDate}
           name="lentOn"
           type="date"
           defaultValue={v('lentOn', initial?.lentOn ?? today)}
           error={errors?.lentOn}
         />
         <Field
-          label="Due date (optional)"
+          label={t.dueDate}
           name="dueOn"
           type="date"
           defaultValue={v('dueOn', initial?.dueOn ?? '')}
           error={errors?.dueOn}
         />
         <Field
-          label="Note (optional)"
+          label={t.note}
           name="note"
           defaultValue={v('note', initial?.note ?? '')}
           error={errors?.note}
@@ -102,7 +105,7 @@ function DebtForm({
         />
         <div className="mt-2 flex flex-wrap justify-end gap-3">
           <Button variant="secondary" onClick={() => setShown(false)}>
-            Cancel
+            {common.cancel}
           </Button>
           <SubmitButton>{submitLabel}</SubmitButton>
         </div>
@@ -114,12 +117,13 @@ function DebtForm({
 /** The dialog is mounted only while open, so a closed form never keeps old input. */
 export function RecordDebt({ today, variant = 'primary' }: { today: string; variant?: 'primary' | 'secondary' }) {
   const [open, setOpen] = useState(false);
+  const t = useMessages().debts;
   return (
     <>
       <Button variant={variant} onClick={() => setOpen(true)}>
-        Record a debt
+        {t.record}
       </Button>
-      {open && <DebtForm title="Record a debt" submitLabel="Save debt" today={today} onClose={() => setOpen(false)} />}
+      {open && <DebtForm title={t.record} submitLabel={t.saveDebt} today={today} onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -144,11 +148,12 @@ export function DebtActions({
 
 function RecordPayment({ debt, outstandingSen, today }: { debt: EditableDebt; outstandingSen: number; today: string }) {
   const [open, setOpen] = useState(false);
+  const t = useMessages().debts;
   return (
     <>
       <Button variant="quiet" onClick={() => setOpen(true)}>
-        Record a payment
-        <span className="sr-only"> from {debt.personName}</span>
+        {t.recordPayment}
+        <span className="sr-only"> {fmt(t.fromName, { name: debt.personName })}</span>
       </Button>
       {open && <PaymentDialog debt={debt} outstandingSen={outstandingSen} today={today} onClose={() => setOpen(false)} />}
     </>
@@ -167,18 +172,19 @@ function PaymentDialog({
   onClose: () => void;
 }) {
   const [state, action] = useActionState(addPaymentAction, initialFormState);
+  const { common, debts: t } = useMessages();
   const formRef = useFocusFirstInvalid(state);
   const [shown, setShown] = useState(true);
   useCloseOnDone(state, () => setShown(false));
   const errors = state.fieldErrors;
   return (
-    <Dialog open={shown} onClose={onClose} title={`Payment from ${debt.personName}`}>
+    <Dialog open={shown} onClose={onClose} title={fmt(t.paymentTitle, { name: debt.personName })}>
       <form ref={formRef} action={action} noValidate className="flex flex-col gap-4">
         <FormAlert state={state} />
         <input type="hidden" name="debtId" value={debt.id} />
         <Field
-          label="Amount paid (RM)"
-          hint={`Still owed: ${formatRM(outstandingSen)}`}
+          label={t.amountPaid}
+          hint={fmt(t.stillOwedHint, { amount: formatRM(outstandingSen) })}
           name="amount"
           inputMode="decimal"
           autoComplete="off"
@@ -186,7 +192,7 @@ function PaymentDialog({
           error={errors?.amount}
         />
         <Field
-          label="Date paid"
+          label={t.datePaid}
           name="paidOn"
           type="date"
           defaultValue={state.values?.paidOn ?? today}
@@ -194,9 +200,9 @@ function PaymentDialog({
         />
         <div className="mt-2 flex flex-wrap justify-end gap-3">
           <Button variant="secondary" onClick={() => setShown(false)}>
-            Cancel
+            {common.cancel}
           </Button>
-          <SubmitButton>Save payment</SubmitButton>
+          <SubmitButton>{t.savePayment}</SubmitButton>
         </div>
       </form>
     </Dialog>
@@ -205,16 +211,17 @@ function PaymentDialog({
 
 function EditDebt({ debt, today }: { debt: EditableDebt; today: string }) {
   const [open, setOpen] = useState(false);
+  const { common, debts: t } = useMessages();
   return (
     <>
       <Button variant="quiet" onClick={() => setOpen(true)}>
-        Edit
-        <span className="sr-only"> debt of {debt.personName}</span>
+        {common.edit}
+        <span className="sr-only"> {fmt(t.debtOf, { name: debt.personName })}</span>
       </Button>
       {open && (
         <DebtForm
-          title={`Edit debt of ${debt.personName}`}
-          submitLabel="Save changes"
+          title={fmt(t.editTitle, { name: debt.personName })}
+          submitLabel={t.saveChanges}
           initial={debt}
           today={today}
           onClose={() => setOpen(false)}
@@ -226,18 +233,19 @@ function EditDebt({ debt, today }: { debt: EditableDebt; today: string }) {
 
 function DeleteDebt({ debt }: { debt: EditableDebt }) {
   const [open, setOpen] = useState(false);
+  const t = useMessages().debts;
   return (
     <>
       <Button variant="quiet" onClick={() => setOpen(true)}>
-        Delete
-        <span className="sr-only"> debt of {debt.personName}</span>
+        {t.delete}
+        <span className="sr-only"> {fmt(t.debtOf, { name: debt.personName })}</span>
       </Button>
       {open && (
         <ConfirmDialog
-          title={`Delete this debt of ${formatRM(debt.amountSen)}?`}
-          body="This removes the debt and every payment recorded against it. This cannot be undone."
-          keepLabel="Keep it"
-          deleteLabel="Delete debt"
+          title={fmt(t.deleteTitle, { amount: formatRM(debt.amountSen) })}
+          body={t.deleteBody}
+          keepLabel={t.keep}
+          deleteLabel={t.deleteConfirm}
           action={deleteDebtAction}
           hidden={{ debtId: debt.id }}
           onClose={() => setOpen(false)}
@@ -256,18 +264,19 @@ export function DeletePayment({
   label: string;
 }) {
   const [open, setOpen] = useState(false);
+  const t = useMessages().debts;
   return (
     <>
       <Button variant="quiet" onClick={() => setOpen(true)}>
-        Remove
-        <span className="sr-only"> payment of {label}</span>
+        {t.remove}
+        <span className="sr-only"> {fmt(t.paymentOf, { payment: label })}</span>
       </Button>
       {open && (
         <ConfirmDialog
-          title={`Remove the payment of ${label}?`}
-          body="The amount counts as owed again. This cannot be undone."
-          keepLabel="Keep it"
-          deleteLabel="Remove payment"
+          title={fmt(t.removeTitle, { payment: label })}
+          body={t.removeBody}
+          keepLabel={t.keep}
+          deleteLabel={t.removeConfirm}
           action={deletePaymentAction}
           hidden={{ paymentId }}
           onClose={() => setOpen(false)}

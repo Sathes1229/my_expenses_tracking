@@ -2,6 +2,10 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { Meter } from '@/components/meter';
 import { PageHeader } from '@/components/page-header';
+import { fmt } from '@/i18n/format';
+import type { Locale } from '@/i18n/locale';
+import type { Messages } from '@/i18n/messages';
+import { getLocale, getMessages } from '@/i18n/server';
 import { getAiBudgetStatus } from '@/lib/ai/budget';
 import { listChat, MESSAGE_MAX_CHARS } from '@/lib/ai/chat';
 import { getAiSettings } from '@/lib/ai/settings';
@@ -11,19 +15,22 @@ import { formatUsd } from '@/lib/money';
 import type { Availability } from './availability';
 import { Chat } from './chat';
 
-export const metadata: Metadata = { title: 'Assistant | My Expenses' };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getMessages()).assistant.pageTitle };
+}
 
 // Blocks on the session read, like the (app) layout.
 export const instant = false;
 
-export default function AssistantPage() {
+export default async function AssistantPage() {
+  const t = (await getMessages()).assistant;
   return (
     <div className="max-w-3xl">
-      <PageHeader title="Assistant" />
+      <PageHeader title={t.title} />
       <Suspense
         fallback={
           <p role="status" className="mt-6 text-muted">
-            Loading the assistant…
+            {t.loading}
           </p>
         }
       >
@@ -36,23 +43,35 @@ export default function AssistantPage() {
 type Status = Awaited<ReturnType<typeof getAiBudgetStatus>>;
 
 /** Members and guests get a rough share in tens, rounded down, never the dollar amounts. */
-function shareLeftText({ budgetMicroUsd: budget, usedMicroUsd: used }: Status): string {
-  if (used <= 0) return "All of today's assistant budget left";
-  if (used >= budget) return "None of today's assistant budget left";
+function shareLeftText({ budgetMicroUsd: budget, usedMicroUsd: used }: Status, t: Messages['assistant']): string {
+  if (used <= 0) return t.shareAll;
+  if (used >= budget) return t.shareNone;
   const tens = Math.floor(((budget - used) * 10) / budget) * 10;
-  return tens === 0 ? "Less than 10% of today's assistant budget left" : `About ${tens}% of today's assistant budget left`;
+  return tens === 0 ? t.shareUnderTen : fmt(t.shareAbout, { percent: tens });
 }
 
 /** The same meter as the budgets: amber from 80% used (the budgets' default alert level), red once used up. */
-function BudgetLeft({ status, isOwner }: { status: Status; isOwner: boolean }) {
+function BudgetLeft({
+  status,
+  isOwner,
+  locale,
+  t,
+}: {
+  status: Status;
+  isOwner: boolean;
+  locale: Locale;
+  t: Messages['assistant'];
+}) {
   const { budgetMicroUsd: budget, usedMicroUsd: used, available } = status;
   const state: BudgetState = !available ? 'over' : used * 100 >= budget * 80 ? 'tight' : 'fine';
   return (
     <div className="mt-6 max-w-sm">
       {/* No label: the same reading is written just below, so the meter is hidden from screen readers. */}
-      <Meter value={Math.min(used, budget)} max={budget} state={state} />
+      <Meter value={Math.min(used, budget)} max={budget} state={state} locale={locale} />
       <p className="mt-1 text-sm text-muted">
-        {isOwner ? `Used today: ${formatUsd(used)} of ${formatUsd(budget)}` : shareLeftText(status)}
+        {isOwner
+          ? fmt(t.usedToday, { used: formatUsd(used, locale), budget: formatUsd(budget, locale) })
+          : shareLeftText(status, t)}
       </p>
     </div>
   );
@@ -61,16 +80,20 @@ function BudgetLeft({ status, isOwner }: { status: Status; isOwner: boolean }) {
 // Every page checks the session itself: the layout does not re-run on client navigation.
 async function Assistant() {
   const viewer = await requireViewer();
-  const [{ chatModel }, status, messages] = await Promise.all([getAiSettings(), getAiBudgetStatus(), listChat(viewer)]);
+  const [{ chatModel }, status, messages, locale, catalog] = await Promise.all([
+    getAiSettings(),
+    getAiBudgetStatus(),
+    listChat(viewer),
+    getLocale(),
+    getMessages(),
+  ]);
+  const t = catalog.assistant;
   const isOwner = viewer.role === 'owner';
   const availability: Availability = !chatModel ? 'not_configured' : status.available ? 'ready' : 'used_up';
   return (
     <>
-      <p className="mt-2 text-muted">
-        Ask about your budgets and spending, in English or Malay. The assistant works from the figures you can see in My
-        Expenses, for this month and the two before.
-      </p>
-      {chatModel && <BudgetLeft status={status} isOwner={isOwner} />}
+      <p className="mt-2 text-muted">{t.intro}</p>
+      {chatModel && <BudgetLeft status={status} isOwner={isOwner} locale={locale} t={t} />}
       <Chat
         initialMessages={messages.map(({ id, role, content }) => ({ id, role, content }))}
         availability={availability}
@@ -78,9 +101,7 @@ async function Assistant() {
         maxChars={MESSAGE_MAX_CHARS}
         hint={
           // A guest's assistant knows budget names and their own spending, not what is left.
-          viewer.role === 'guest'
-            ? 'Try asking how much you have spent this month, or where you could spend less.'
-            : 'Try asking which budget is running out fastest this month, or where you could spend less.'
+          viewer.role === 'guest' ? t.hintGuest : t.hintMember
         }
       />
     </>
