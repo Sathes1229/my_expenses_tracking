@@ -75,6 +75,14 @@ export function monthLabel(month: string, locale: Locale = 'en'): string {
   return `${name} ${y}`;
 }
 
+/** "17 Nov" or "3 Ogo": a day of a YYYY-MM month, in the given language. */
+export function dayMonthLabel(month: string, day: number, locale: Locale = 'en'): string {
+  const [y, m] = month.split('-').map(Number);
+  return new Intl.DateTimeFormat(INTL[locale], { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(
+    new Date(Date.UTC(y, m - 1, day)),
+  );
+}
+
 /** The month `delta` months from `month` (a YYYY-MM string). */
 export function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split('-').map(Number);

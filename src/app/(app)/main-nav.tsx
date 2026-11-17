@@ -26,7 +26,7 @@ const look = {
   },
   bottom: {
     nav: 'fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] lg:hidden',
-    // 13px labels so the owner's six items fit a 360px phone in one row.
+    // 13px labels, so up to five items fit one row on any phone.
     list: 'flex overflow-x-auto',
     item: 'flex flex-auto',
     link: 'relative flex min-h-14 flex-auto items-center justify-center px-1 text-[0.8125rem] font-medium whitespace-nowrap text-muted no-underline transition-state hover:bg-sunken hover:text-ink active:bg-sunken',
@@ -34,12 +34,16 @@ const look = {
   },
 } as const;
 
-// Narrower than 360px six items do not fit one row with a 44px target each, so they go in two rows
-// of three, each 44px tall: every item stays in view and one tap away, with no sideways scrolling.
+// Six or seven items do not fit one row of a phone in both languages ("Transactions", "Pembantu"),
+// so below 480px they go in two rows, each 44px tall: every item stays in view and one tap away,
+// with no sideways scrolling. Six items make rows of three; seven make four and three.
 // The current item's bar moves under its label there; on top it would sit on the row above's label.
-const twoRowsList = 'max-[22.5rem]:grid max-[22.5rem]:grid-cols-3';
-const twoRowsLink = 'max-[22.5rem]:min-h-11';
-const twoRowsCurrent = 'max-[22.5rem]:before:top-auto max-[22.5rem]:before:bottom-1';
+const twoRowsList = {
+  3: 'max-[30rem]:grid max-[30rem]:grid-cols-3',
+  4: 'max-[30rem]:grid max-[30rem]:grid-cols-4',
+} as const;
+const twoRowsLink = 'max-[30rem]:min-h-11';
+const twoRowsCurrent = 'max-[30rem]:before:top-auto max-[30rem]:before:bottom-1';
 
 /**
  * The main destinations, as a top row on wide screens and a bottom bar on narrower ones. The
@@ -48,12 +52,15 @@ const twoRowsCurrent = 'max-[22.5rem]:before:top-auto max-[22.5rem]:before:botto
  */
 export function MainNav({
   items,
+  label,
   variant,
   twoRows = false,
 }: {
   items: NavItem[];
+  /** The landmark's name, in the viewer's language. */
+  label: string;
   variant: 'top' | 'bottom';
-  /** Bottom bar only: two rows of three on phones narrower than 360px. */
+  /** Bottom bar only: two rows on phones narrower than 480px. */
   twoRows?: boolean;
 }) {
   const pathname = usePathname();
@@ -61,11 +68,11 @@ export function MainNav({
   const rows = variant === 'bottom' && twoRows;
   return (
     <nav
-      aria-label="Main"
+      aria-label={label}
       className={style.nav}
       data-bottom-nav={variant === 'bottom' ? (rows ? 'two-rows' : 'one-row') : undefined}
     >
-      <ul className={cx(style.list, rows && twoRowsList)}>
+      <ul className={cx(style.list, rows && twoRowsList[items.length > 6 ? 4 : 3])}>
         {items.map((item) => {
           const current = currentFor(pathname, item.href);
           return (

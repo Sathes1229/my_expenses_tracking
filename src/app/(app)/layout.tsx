@@ -5,6 +5,7 @@ import { cx } from '@/components/cx';
 import { NotificationBell } from '@/components/notification-bell';
 import { SubmitButton } from '@/components/submit-button';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { getMessages } from '@/i18n/server';
 import { requireViewer } from '@/lib/auth/viewer';
 import { unreadCount } from '@/lib/notifications';
 import { signOut } from '../sign-out';
@@ -35,23 +36,26 @@ const bar = 'mx-auto flex w-full max-w-5xl flex-wrap items-center justify-betwee
 // Below the lg breakpoint the bottom bar (3.5rem and its border) sits over the end of the page,
 // so the page ends that much higher, plus the home indicator.
 const mainClass = 'mx-auto w-full max-w-5xl px-page pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-8';
-// When the bar takes two 2.75rem rows (under 360px), the page ends 2rem higher still.
-const mainTwoRowsClass = 'max-[22.5rem]:pb-[calc(7.5rem+env(safe-area-inset-bottom))]';
+// When the bar takes two 2.75rem rows (under 480px), the page ends 2rem higher still.
+const mainTwoRowsClass = 'max-[30rem]:pb-[calc(7.5rem+env(safe-area-inset-bottom))]';
 
 async function SignedInShell({ children }: { children: ReactNode }) {
   const viewer = await requireViewer();
   const unread = await unreadCount(viewer);
   // Only pages that exist for this role: Debts is the owner's; Settings holds People & invites
   // for the owner, everyone else has Profile.
+  const nav = (await getMessages()).nav;
+  // Reports shows household figures, so not to a guest.
   const items: NavItem[] = [
-    { href: '/', label: 'Home' },
-    { href: '/transactions', label: 'Transactions' },
-    { href: '/budgets', label: 'Budgets' },
-    ...(viewer.role === 'owner' ? [{ href: '/debts', label: 'Debts' }] : []),
-    { href: '/assistant', label: 'Assistant' },
-    viewer.role === 'owner' ? { href: '/settings', label: 'Settings' } : { href: '/settings/profile', label: 'Profile' },
+    { href: '/', label: nav.home },
+    { href: '/transactions', label: nav.transactions },
+    { href: '/budgets', label: nav.budgets },
+    ...(viewer.role !== 'guest' ? [{ href: '/reports', label: nav.reports }] : []),
+    ...(viewer.role === 'owner' ? [{ href: '/debts', label: nav.debts }] : []),
+    { href: '/assistant', label: nav.assistant },
+    viewer.role === 'owner' ? { href: '/settings', label: nav.settings } : { href: '/settings/profile', label: nav.profile },
   ];
-  // Six items (the owner's) do not fit one row of the bottom bar on a phone under 360px wide.
+  // Six or seven items (owner, member) take two rows of the bottom bar on a phone under 480px.
   const twoRows = items.length > 5;
   return (
     <>
@@ -65,7 +69,7 @@ async function SignedInShell({ children }: { children: ReactNode }) {
             <p className="truncate text-sm text-muted">Signed in as {viewer.displayName}</p>
           </div>
           <div className="flex flex-wrap items-center gap-x-1">
-            <MainNav items={items} variant="top" />
+            <MainNav items={items} label={nav.label} variant="top" />
             {/* Guests get no budget alerts, so no bell. */}
             {viewer.role !== 'guest' && <NotificationBell unread={unread} />}
             <ThemeToggle />
@@ -75,7 +79,7 @@ async function SignedInShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <MainNav items={items} variant="bottom" twoRows={twoRows} />
+      <MainNav items={items} label={nav.label} variant="bottom" twoRows={twoRows} />
       <main className={cx(mainClass, twoRows && mainTwoRowsClass)}>{children}</main>
     </>
   );

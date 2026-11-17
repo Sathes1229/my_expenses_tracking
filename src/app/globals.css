@@ -156,8 +156,8 @@
       scroll-padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
     }
   }
-  /* The owner's bar takes two rows under 360px (MainNav), 2rem taller. */
-  @media (width < 22.5rem) {
+  /* An owner's or member's bar takes two rows under 480px (MainNav), 2rem taller. */
+  @media (width < 30rem) {
     html:has([data-bottom-nav="two-rows"]) {
       scroll-padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
     }
