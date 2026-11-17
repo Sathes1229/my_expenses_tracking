@@ -1,3 +1,6 @@
+import type { Locale } from '@/i18n/locale';
+import { problemText } from './errors';
+
 /** What a form's server action returns to useActionState. Plain module: client forms import it too. */
 export type FormState = {
   /** Counts submissions, so a repeated message is announced again. */
@@ -23,14 +26,16 @@ export function formText(formData: FormData, name: string): string {
 }
 
 /** For the "Repeat password" field; silent while the first password is still empty. */
-export function repeatError(password: string, repeat: string): string | null {
+export function repeatError(password: string, repeat: string, locale: Locale = 'en'): string | null {
   if (!password) return null;
-  if (!repeat) return 'Type the password again.';
-  return repeat === password ? null : 'The two passwords are not the same.';
+  if (!repeat) return problemText({ key: 'typePasswordAgain' }, locale);
+  return repeat === password ? null : problemText({ key: 'passwordsDiffer' }, locale);
 }
 
 /** "1 minute", "15 minutes": always rounded up, so people never come back too early. */
-export function waitText(seconds: number): string {
+export function waitText(seconds: number, locale: Locale = 'en'): string {
   const minutes = Math.max(1, Math.ceil(seconds / 60));
-  return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+  return minutes === 1
+    ? problemText({ key: 'waitOneMinute' }, locale)
+    : problemText({ key: 'waitMinutes', params: { n: minutes } }, locale);
 }

@@ -63,6 +63,6 @@ export function costFor(model: ModelInfo, inputTokens: number, outputTokens: num
 
 export function costMicroUsd(modelId: string, inputTokens: number, outputTokens: number): number {
   const model = findModel(modelId);
-  if (!model) throw new ValidationError('model', 'That model is not in the list.');
+  if (!model) throw new ValidationError('model', 'modelNotListed');
   return costFor(model, inputTokens, outputTokens);
 }

@@ -3,7 +3,7 @@ import { and, desc, eq, gt, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { invites } from '@/db/schema';
 import { authEnv } from '@/lib/env';
-import { ValidationError } from '@/lib/errors';
+import { ValidationError, type Problem } from '@/lib/errors';
 import { createAccount, displayNameError, passwordError, usernameError } from './accounts';
 import { assertOwner, type Viewer } from './viewer';
 
@@ -50,7 +50,7 @@ export function inviteLink(token: string): string {
 /** The token is returned once, here; afterwards only its hash exists. */
 export async function createInvite(owner: Viewer, role: InviteRole): Promise<{ id: string; token: string }> {
   assertOwner(owner);
-  if (!isInviteRole(role)) throw new ValidationError('role', 'Choose Member or Guest.');
+  if (!isInviteRole(role)) throw new ValidationError('role', 'chooseRole');
 
   const token = randomBytes(32).toString('base64url');
   const createdAt = Date.now();
@@ -97,8 +97,8 @@ export async function revokeInvite(owner: Viewer, id: string): Promise<void> {
   assertOwner(owner);
   db.transaction((tx) => {
     const row = tx.select().from(invites).where(eq(invites.id, id)).get();
-    if (!row) throw new ValidationError('invite', 'That invite no longer exists.');
-    if (row.usedAt !== null) throw new ValidationError('invite', 'That invite was already used, so it cannot be revoked.');
+    if (!row) throw new ValidationError('invite', 'inviteGone');
+    if (row.usedAt !== null) throw new ValidationError('invite', 'inviteUsedCannotRevoke');
     if (row.revokedAt !== null) return;
     tx.update(invites).set({ revokedAt: Date.now() }).where(eq(invites.id, id)).run();
   });
@@ -125,7 +125,7 @@ export async function acceptInvite(
   if (before !== 'valid') return { ok: false, reason: before };
   const invite = found!;
 
-  const problems: Array<[field: string, message: string | null]> = [
+  const problems: Array<[field: string, message: Problem | null]> = [
     ['displayName', displayNameError(input.displayName)],
     ['username', usernameError(input.username)],
     ['password', passwordError(input.password)],

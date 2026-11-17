@@ -3,7 +3,9 @@
 import { refresh } from 'next/cache';
 import { requireOwner } from '@/lib/auth/viewer';
 import { allocationFor, archiveBudget, createBudget, updateBudget } from '@/lib/budgets';
-import { ValidationError } from '@/lib/errors';
+import { getLocale } from '@/i18n/server';
+import type { Locale } from '@/i18n/locale';
+import { errorText, say, ValidationError } from '@/lib/errors';
 import { formText, nextFormState, type FormState } from '@/lib/form-state';
 import { parseRM } from '@/lib/money';
 import { monthKey } from '@/lib/time';
@@ -15,19 +17,19 @@ import { monthKey } from '@/lib/time';
 type Parsed = { name: string; allocationSen: number; thresholdPct: number };
 
 /** Reads the three fields. A bad one comes back as a message under that field, not a thrown error. */
-function parseFields(formData: FormData): { ok: true; value: Parsed } | { ok: false; errors: Record<string, string> } {
+function parseFields(formData: FormData, locale: Locale): { ok: true; value: Parsed } | { ok: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   const name = formText(formData, 'name');
   const allocationText = formText(formData, 'allocation');
   const thresholdText = formText(formData, 'threshold').trim();
 
-  if (!name.trim()) errors.name = 'Enter a name for the budget.';
+  if (!name.trim()) errors.name = say(locale, 'budgetNameMissing');
   const allocationSen = allocationText.trim() ? parseRM(allocationText) : null;
   if (allocationSen === null) {
-    errors.allocation = allocationText.trim() ? 'Enter an amount like 800 or 800.50.' : 'Enter the monthly amount.';
+    errors.allocation = allocationText.trim() ? say(locale, 'budgetAmountFormat') : say(locale, 'enterMonthlyAmount');
   }
   const thresholdPct = /^\d{1,3}$/.test(thresholdText) ? Number(thresholdText) : NaN;
-  if (!(thresholdPct >= 1 && thresholdPct <= 100)) errors.threshold = 'Enter a whole number from 1 to 100.';
+  if (!(thresholdPct >= 1 && thresholdPct <= 100)) errors.threshold = say(locale, 'thresholdRange');
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };
   return { ok: true, value: { name, allocationSen: allocationSen as number, thresholdPct } };
@@ -51,9 +53,10 @@ async function attempt(prev: FormState, formData: FormData, change: () => Promis
     await change();
   } catch (error) {
     if (error instanceof ValidationError) {
+      const locale = await getLocale();
       return FIELDS.includes(error.field)
-        ? nextFormState(prev, { fieldErrors: { [error.field]: error.message }, values })
-        : nextFormState(prev, { message: error.message, values });
+        ? nextFormState(prev, { fieldErrors: { [error.field]: errorText(error, locale) }, values })
+        : nextFormState(prev, { message: errorText(error, locale), values });
     }
     throw error;
   }
@@ -64,7 +67,7 @@ async function attempt(prev: FormState, formData: FormData, change: () => Promis
 
 export async function createBudgetAction(prev: FormState, formData: FormData): Promise<FormState> {
   const owner = await requireOwner();
-  const parsed = parseFields(formData);
+  const parsed = parseFields(formData, await getLocale());
   if (!parsed.ok) {
     return nextFormState(prev, { fieldErrors: parsed.errors, values: submitted(formData) });
   }
@@ -76,7 +79,7 @@ export async function createBudgetAction(prev: FormState, formData: FormData): P
 export async function updateBudgetAction(prev: FormState, formData: FormData): Promise<FormState> {
   const owner = await requireOwner();
   const id = formText(formData, 'budgetId');
-  const parsed = parseFields(formData);
+  const parsed = parseFields(formData, await getLocale());
   if (!parsed.ok) {
     return nextFormState(prev, { fieldErrors: parsed.errors, values: submitted(formData) });
   }

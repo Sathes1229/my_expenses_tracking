@@ -2,40 +2,37 @@ import { isAPIError } from 'better-auth/api';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { user } from '@/db/schema';
-import { ValidationError } from '@/lib/errors';
+import { ValidationError, type Problem } from '@/lib/errors';
 import { getAuth } from './auth';
 import { beginLoginAttempt, markLoginSucceeded } from './throttle';
 import type { Role } from './viewer';
 
 const USERNAME_PATTERN = /^[a-z0-9._]{3,30}$/;
-const USERNAME_TAKEN = 'That username is already taken.';
 
 /** Usernames are stored and compared lower-cased. Phones often add a trailing space, so trim it. */
 export function normalizeUsername(username: string): string {
   return username.trim().toLowerCase();
 }
 
-export function usernameError(username: string): string | null {
+export function usernameError(username: string): Problem | null {
   const normalized = normalizeUsername(username);
-  if (!normalized) return 'Enter a username.';
-  if (!USERNAME_PATTERN.test(normalized)) {
-    return 'Use 3 to 30 characters: letters, numbers, dots or underscores.';
-  }
+  if (!normalized) return { key: 'enterUsername' };
+  if (!USERNAME_PATTERN.test(normalized)) return { key: 'usernameRules' };
   return null;
 }
 
 /** Better Auth refuses passwords over 128 characters at sign-in, so they are refused here too. */
-export function passwordError(password: string): string | null {
-  if (!password) return 'Enter a password.';
-  if (password.length < 8) return 'Use at least 8 characters.';
-  if (password.length > 128) return 'Use 128 characters or fewer.';
+export function passwordError(password: string): Problem | null {
+  if (!password) return { key: 'enterPassword' };
+  if (password.length < 8) return { key: 'passwordTooShort' };
+  if (password.length > 128) return { key: 'tooLong', params: { max: 128 } };
   return null;
 }
 
-export function displayNameError(displayName: string): string | null {
+export function displayNameError(displayName: string): Problem | null {
   const name = displayName.trim();
-  if (!name) return 'Enter a name.';
-  if (name.length > 40) return 'Use 40 characters or fewer.';
+  if (!name) return { key: 'enterName' };
+  if (name.length > 40) return { key: 'tooLong', params: { max: 40 } };
   return null;
 }
 
@@ -58,7 +55,7 @@ export async function createAccount(input: {
   role: Role;
   mustChangePassword?: boolean;
 }): Promise<{ id: string }> {
-  const problems: Array<[field: string, message: string | null]> = [
+  const problems: Array<[field: string, message: Problem | null]> = [
     ['displayName', displayNameError(input.displayName)],
     ['username', usernameError(input.username)],
     ['password', passwordError(input.password)],
@@ -67,7 +64,7 @@ export async function createAccount(input: {
     if (message) throw new ValidationError(field, message);
   }
   const username = normalizeUsername(input.username);
-  if (usernameTaken(username)) throw new ValidationError('username', USERNAME_TAKEN);
+  if (usernameTaken(username)) throw new ValidationError('username', 'usernameTaken');
 
   // Same calls as Better Auth's own server-side createUser (admin plugin), without its extra endpoints.
   const ctx = await getAuth().$context;
@@ -86,7 +83,7 @@ export async function createAccount(input: {
     );
   } catch (error) {
     // Someone took the username between the check above and the insert.
-    if (usernameTaken(username)) throw new ValidationError('username', USERNAME_TAKEN);
+    if (usernameTaken(username)) throw new ValidationError('username', 'usernameTaken');
     throw error;
   }
   try {
@@ -150,7 +147,7 @@ export async function replaceTemporaryPassword(
   const ctx = await getAuth().$context;
   const current = await ctx.internalAdapter.findCredentialAccount(userId);
   if (current?.password && (await ctx.password.verify({ hash: current.password, password: newPassword }))) {
-    throw new ValidationError('password', 'Choose a password different from the temporary one.');
+    throw new ValidationError('password', 'passwordSameAsTemporary');
   }
   await ctx.internalAdapter.updatePassword(userId, await ctx.password.hash(newPassword));
   const others = (await ctx.internalAdapter.listSessions(userId))

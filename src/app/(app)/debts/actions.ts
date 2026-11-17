@@ -3,7 +3,9 @@
 import { refresh } from 'next/cache';
 import { requireOwner } from '@/lib/auth/viewer';
 import { addPayment, createDebt, deleteDebt, deletePayment, updateDebt, type DebtInput } from '@/lib/debts';
-import { ValidationError } from '@/lib/errors';
+import { getLocale } from '@/i18n/server';
+import type { Locale } from '@/i18n/locale';
+import { errorText, say, ValidationError } from '@/lib/errors';
 import { formText, nextFormState, type FormState } from '@/lib/form-state';
 import { parseRM } from '@/lib/money';
 
@@ -14,11 +16,11 @@ import { parseRM } from '@/lib/money';
 const FIELDS = ['personName', 'amount', 'lentOn', 'dueOn', 'note', 'paidOn'];
 
 /** Reads the amount field. A bad one comes back as a message under that field. */
-function parseAmount(formData: FormData): { sen: number } | { error: string } {
+function parseAmount(formData: FormData, locale: Locale): { sen: number } | { error: string } {
   const text = formText(formData, 'amount').trim();
-  if (!text) return { error: 'Enter the amount.' };
+  if (!text) return { error: say(locale, 'enterAmount') };
   const sen = parseRM(text);
-  return sen === null ? { error: 'Enter an amount like 500 or 500.50.' } : { sen };
+  return sen === null ? { error: say(locale, 'debtAmountFormat') } : { sen };
 }
 
 function submitted(formData: FormData): Record<string, string> {
@@ -34,9 +36,10 @@ async function attempt(prev: FormState, formData: FormData, change: () => Promis
     await change();
   } catch (error) {
     if (error instanceof ValidationError) {
+      const locale = await getLocale();
       return FIELDS.includes(error.field)
-        ? nextFormState(prev, { fieldErrors: { [error.field]: error.message }, values })
-        : nextFormState(prev, { message: error.message, values });
+        ? nextFormState(prev, { fieldErrors: { [error.field]: errorText(error, locale) }, values })
+        : nextFormState(prev, { message: errorText(error, locale), values });
     }
     throw error;
   }
@@ -46,10 +49,10 @@ async function attempt(prev: FormState, formData: FormData, change: () => Promis
 }
 
 /** A bad amount, plus a blank name when the form has one, so both show at once. */
-function amountFailed(prev: FormState, formData: FormData, error: string): FormState {
+function amountFailed(prev: FormState, formData: FormData, error: string, locale: Locale): FormState {
   const fieldErrors: Record<string, string> = { amount: error };
   if (formData.has('personName') && !formText(formData, 'personName').trim()) {
-    fieldErrors.personName = 'Enter who you lent the money to.';
+    fieldErrors.personName = say(locale, 'debtPersonMissing');
   }
   return nextFormState(prev, { fieldErrors, values: submitted(formData) });
 }
@@ -66,8 +69,9 @@ function debtInput(formData: FormData, amountSen: number): DebtInput {
 
 export async function createDebtAction(prev: FormState, formData: FormData): Promise<FormState> {
   const owner = await requireOwner();
-  const amount = parseAmount(formData);
-  if ('error' in amount) return amountFailed(prev, formData, amount.error);
+  const locale = await getLocale();
+  const amount = parseAmount(formData, locale);
+  if ('error' in amount) return amountFailed(prev, formData, amount.error, locale);
   return attempt(prev, formData, async () => {
     await createDebt(owner, debtInput(formData, amount.sen));
   });
@@ -75,8 +79,9 @@ export async function createDebtAction(prev: FormState, formData: FormData): Pro
 
 export async function updateDebtAction(prev: FormState, formData: FormData): Promise<FormState> {
   const owner = await requireOwner();
-  const amount = parseAmount(formData);
-  if ('error' in amount) return amountFailed(prev, formData, amount.error);
+  const locale = await getLocale();
+  const amount = parseAmount(formData, locale);
+  if ('error' in amount) return amountFailed(prev, formData, amount.error, locale);
   return attempt(prev, formData, () => updateDebt(owner, formText(formData, 'debtId'), debtInput(formData, amount.sen)));
 }
 
@@ -87,8 +92,9 @@ export async function deleteDebtAction(prev: FormState, formData: FormData): Pro
 
 export async function addPaymentAction(prev: FormState, formData: FormData): Promise<FormState> {
   const owner = await requireOwner();
-  const amount = parseAmount(formData);
-  if ('error' in amount) return amountFailed(prev, formData, amount.error);
+  const locale = await getLocale();
+  const amount = parseAmount(formData, locale);
+  if ('error' in amount) return amountFailed(prev, formData, amount.error, locale);
   return attempt(prev, formData, () =>
     addPayment(owner, formText(formData, 'debtId'), { amountSen: amount.sen, paidOn: formText(formData, 'paidOn') }),
   );

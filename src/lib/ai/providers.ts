@@ -35,10 +35,10 @@ export function describeProviderError(error: unknown): string {
  */
 export function languageModel(modelId: string, source: Env = loadEnv()): LanguageModel {
   const model = findModel(modelId);
-  if (!model) throw new ValidationError('model', 'That model is not in the list.');
+  if (!model) throw new ValidationError('model', 'modelNotListed');
   const apiKey = source[PROVIDER_KEY_NAMES[model.provider]];
   if (!apiKey) {
-    throw new ValidationError('model', `Add ${PROVIDER_KEY_NAMES[model.provider]} to the .env file to use this model.`);
+    throw new ValidationError('model', 'modelNeedsKey', { key: PROVIDER_KEY_NAMES[model.provider] });
   }
   switch (model.provider) {
     case 'anthropic':

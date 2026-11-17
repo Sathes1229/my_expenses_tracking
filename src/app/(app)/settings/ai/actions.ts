@@ -1,29 +1,31 @@
 'use server';
 
 import { refresh } from 'next/cache';
+import { getLocale } from '@/i18n/server';
 import { resetTodayUsage } from '@/lib/ai/budget';
 import { setChatModel, setDailyBudget, setReceiptModel } from '@/lib/ai/settings';
 import { requireOwner } from '@/lib/auth/viewer';
-import { ValidationError } from '@/lib/errors';
+import { errorText, say, ValidationError } from '@/lib/errors';
 import { formText, nextFormState, type FormState } from '@/lib/form-state';
 
 // Owner only, checked here (requireOwner) and again in the lib functions: a server action is
 // reachable by a plain POST, so the page being owner-only protects nothing.
 
-function failure(prev: FormState, error: unknown, values: Record<string, string>): FormState {
+async function failure(prev: FormState, error: unknown, values: Record<string, string>): Promise<FormState> {
   if (error instanceof ValidationError) {
-    return nextFormState(prev, { fieldErrors: { [error.field]: error.message }, values });
+    return nextFormState(prev, { fieldErrors: { [error.field]: errorText(error, await getLocale()) }, values });
   }
   throw error;
 }
 
 /** A field left on "Not chosen" keeps whatever was saved before. */
 export async function saveModelsAction(prev: FormState, formData: FormData): Promise<FormState> {
+  const locale = await getLocale();
   const owner = await requireOwner();
   const chat = formText(formData, 'chatModel');
   const receipt = formText(formData, 'receiptModel');
   if (!chat && !receipt) {
-    return nextFormState(prev, { message: 'Choose a model for the assistant or for receipts, then save.' });
+    return nextFormState(prev, { message: say(locale, 'chooseModelThenSave') });
   }
   try {
     if (chat) await setChatModel(owner, chat);

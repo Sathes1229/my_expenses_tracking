@@ -1,6 +1,7 @@
 'use server';
 
 import { headers } from 'next/headers';
+import { getLocale } from '@/i18n/server';
 import { redirect } from 'next/navigation';
 import {
   createAccount,
@@ -11,11 +12,12 @@ import {
   usernameError,
 } from '@/lib/auth/accounts';
 import { clientIp } from '@/lib/auth/throttle';
-import { ValidationError } from '@/lib/errors';
+import { checkText, errorText, ValidationError } from '@/lib/errors';
 import { formText, nextFormState, repeatError, type FormState } from '@/lib/form-state';
 
 /** Creates the owner, but only while nobody exists yet, then signs them in. */
 export async function createOwnerAction(prev: FormState, formData: FormData): Promise<FormState> {
+  const locale = await getLocale();
   if (await hasAnyUser()) redirect('/login');
 
   const displayName = formText(formData, 'displayName');
@@ -26,10 +28,10 @@ export async function createOwnerAction(prev: FormState, formData: FormData): Pr
 
   const fieldErrors: Record<string, string> = {};
   const checks: Array<[field: string, message: string | null]> = [
-    ['displayName', displayNameError(displayName)],
-    ['username', usernameError(username)],
-    ['password', passwordError(password)],
-    ['confirm', repeatError(password, confirm)],
+    ['displayName', checkText(displayNameError(displayName), locale)],
+    ['username', checkText(usernameError(username), locale)],
+    ['password', checkText(passwordError(password), locale)],
+    ['confirm', repeatError(password, confirm, locale)],
   ];
   for (const [field, message] of checks) if (message) fieldErrors[field] = message;
   if (Object.keys(fieldErrors).length > 0) return nextFormState(prev, { fieldErrors, values });
@@ -38,7 +40,7 @@ export async function createOwnerAction(prev: FormState, formData: FormData): Pr
     await createAccount({ username, displayName, password, role: 'owner' });
   } catch (error) {
     if (error instanceof ValidationError) {
-      return nextFormState(prev, { fieldErrors: { [error.field]: error.message }, values });
+      return nextFormState(prev, { fieldErrors: { [error.field]: errorText(error, await getLocale()) }, values });
     }
     // Another submission created the owner first; the database refused a second one.
     if (await hasAnyUser()) redirect('/login');

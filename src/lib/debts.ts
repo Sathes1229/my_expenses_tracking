@@ -41,19 +41,19 @@ export function debtStatus(amountSen: number, repaidSen: number): DebtStatus {
 
 function checkName(raw: string): string {
   const name = raw.trim().replace(/\s+/g, ' ');
-  if (!name) throw new ValidationError('personName', 'Enter who you lent the money to.');
-  if (name.length > NAME_MAX) throw new ValidationError('personName', `Use ${NAME_MAX} characters or fewer.`);
+  if (!name) throw new ValidationError('personName', 'debtPersonMissing');
+  if (name.length > NAME_MAX) throw new ValidationError('personName', 'tooLong', { max: NAME_MAX });
   return name;
 }
 
 function checkAmount(field: string, sen: number): number {
-  if (!Number.isSafeInteger(sen) || sen <= 0) throw new ValidationError(field, 'Enter an amount above RM 0.00.');
+  if (!Number.isSafeInteger(sen) || sen <= 0) throw new ValidationError(field, 'amountAboveZero');
   return sen;
 }
 
 function checkNote(raw: string | undefined): string | null {
   const note = raw?.trim() ?? '';
-  if (note.length > NOTE_MAX) throw new ValidationError('note', `Use ${NOTE_MAX} characters or fewer.`);
+  if (note.length > NOTE_MAX) throw new ValidationError('note', 'tooLong', { max: NOTE_MAX });
   return note || null;
 }
 
@@ -67,14 +67,14 @@ function checkDate(field: string, value: string): string {
       return value;
     }
   }
-  throw new ValidationError(field, 'Enter a real date.');
+  throw new ValidationError(field, 'realDate');
 }
 
 /** A date that has happened or is at most one day ahead (Malaysia time), so a clock a little off still works. */
 function checkNotAhead(field: string, value: string): string {
   checkDate(field, value);
   const limit = dayKey(new Date(Date.now() + 24 * 60 * 60 * 1000));
-  if (value > limit) throw new ValidationError(field, 'Choose today or an earlier date.');
+  if (value > limit) throw new ValidationError(field, 'notFutureDate');
   return value;
 }
 
@@ -83,7 +83,7 @@ function checkDebtFields(input: DebtInput) {
   const amountSen = checkAmount('amount', input.amountSen);
   const lentOn = checkNotAhead('lentOn', input.lentOn);
   const dueOn = input.dueOn ? checkDate('dueOn', input.dueOn) : null;
-  if (dueOn && dueOn < lentOn) throw new ValidationError('dueOn', 'The due date cannot be before the day you lent it.');
+  if (dueOn && dueOn < lentOn) throw new ValidationError('dueOn', 'dueBeforeLent');
   return { personName, amountSen, lentOn, dueOn, note: checkNote(input.note) };
 }
 
@@ -98,7 +98,7 @@ function repaidFor(tx: Tx, debtId: string): number {
 
 function existingDebt(tx: Tx, id: string) {
   const row = tx.select().from(debts).where(eq(debts.id, id)).get();
-  if (!row) throw new ValidationError('debt', 'That debt is not in the app any more.');
+  if (!row) throw new ValidationError('debt', 'debtGone');
   return row;
 }
 
@@ -114,7 +114,7 @@ export async function updateDebt(owner: Viewer, id: string, input: DebtInput): P
     existingDebt(tx, id);
     const values = checkDebtFields(input);
     if (values.amountSen < repaidFor(tx, id)) {
-      throw new ValidationError('amount', 'That is less than what has already been repaid.');
+      throw new ValidationError('amount', 'lessThanRepaid');
     }
     const earliest = tx
       .select({ paidOn: sql<string | null>`min(${debtPayments.paidOn})` })
@@ -122,7 +122,7 @@ export async function updateDebt(owner: Viewer, id: string, input: DebtInput): P
       .where(eq(debtPayments.debtId, id))
       .get()?.paidOn;
     if (earliest && earliest < values.lentOn) {
-      throw new ValidationError('lentOn', 'A payment is dated before that day. Change or remove the payment first.');
+      throw new ValidationError('lentOn', 'paymentDatedBefore');
     }
     tx.update(debts).set(values).where(eq(debts.id, id)).run();
   });
@@ -147,10 +147,10 @@ export async function addPayment(
     const debt = existingDebt(tx, debtId);
     const amountSen = checkAmount('amount', input.amountSen);
     const paidOn = checkNotAhead('paidOn', input.paidOn);
-    if (paidOn < debt.lentOn) throw new ValidationError('paidOn', 'The payment cannot be before the day you lent it.');
+    if (paidOn < debt.lentOn) throw new ValidationError('paidOn', 'paymentBeforeLent');
     const outstanding = debt.amountSen - repaidFor(tx, debtId);
     if (amountSen > outstanding) {
-      throw new ValidationError('amount', 'That is more than what is still owed.');
+      throw new ValidationError('amount', 'moreThanOwed');
     }
     tx.insert(debtPayments).values({ debtId, amountSen, paidOn }).run();
   });
@@ -160,7 +160,7 @@ export async function deletePayment(owner: Viewer, paymentId: string): Promise<v
   assertOwner(owner);
   db.transaction((tx) => {
     const row = tx.select({ id: debtPayments.id }).from(debtPayments).where(eq(debtPayments.id, paymentId)).get();
-    if (!row) throw new ValidationError('payment', 'That payment is not in the app any more.');
+    if (!row) throw new ValidationError('payment', 'paymentGone');
     tx.delete(debtPayments).where(eq(debtPayments.id, paymentId)).run();
   });
 }

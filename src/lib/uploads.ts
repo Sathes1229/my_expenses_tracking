@@ -11,7 +11,6 @@ import { getTransaction } from '@/lib/transactions';
 
 /** The largest photo taken in, before it is shrunk. Phone photos are usually 2 to 8 MB. */
 export const MAX_RECEIPT_BYTES = 15 * 1024 * 1024;
-export const RECEIPT_TOO_LARGE = 'That photo is larger than 15 MB. Take it again, or use a screenshot of it.';
 
 // Long enough edge to read small print on a long receipt, small enough to keep and to send to the AI.
 const LONGEST_EDGE = 1600;
@@ -20,26 +19,22 @@ const MAX_PIXELS = 100_000_000;
 const ACCEPTED = new Set(['jpeg', 'png', 'webp']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-const HEIC =
-  'This photo is in HEIC format, which cannot be read here. Set the camera to “Most Compatible” ' +
-  '(on an iPhone: Settings, Camera, Formats), or take a screenshot of the photo and use that.';
-
 // The file on disk is named by the upload's random id, never by anything the browser sent.
 const relativePath = (uploadId: string) => `receipts/${uploadId}.jpg`;
 
 /** Format from the bytes themselves. The browser's type is only used to explain a HEIC photo sharp cannot open. */
 async function checkImage(bytes: Buffer, mime: string): Promise<void> {
-  if (bytes.length === 0) throw new ValidationError('image', 'Choose a photo of the receipt.');
-  if (bytes.length > MAX_RECEIPT_BYTES) throw new ValidationError('image', RECEIPT_TOO_LARGE);
+  if (bytes.length === 0) throw new ValidationError('image', 'choosePhoto');
+  if (bytes.length > MAX_RECEIPT_BYTES) throw new ValidationError('image', 'photoTooLarge');
   const meta = await sharp(bytes).metadata().catch(() => null);
   if (meta && ACCEPTED.has(meta.format)) {
     if (meta.width * meta.height > MAX_PIXELS) {
-      throw new ValidationError('image', 'That photo has too many pixels to read. Take it at a lower resolution, or use a screenshot of it.');
+      throw new ValidationError('image', 'photoTooManyPixels');
     }
     return;
   }
-  if (meta?.format === 'heif' || /^image\/hei[cf]/i.test(mime)) throw new ValidationError('image', HEIC);
-  throw new ValidationError('image', 'Use a JPEG, PNG or WebP photo of the receipt.');
+  if (meta?.format === 'heif' || /^image\/hei[cf]/i.test(mime)) throw new ValidationError('image', 'photoHeic');
+  throw new ValidationError('image', 'photoFormat');
 }
 
 /**
@@ -56,7 +51,7 @@ export async function saveReceiptImage(viewer: Viewer, file: { bytes: Buffer; mi
       .jpeg({ quality: 82 })
       .toBuffer();
   } catch {
-    throw new ValidationError('image', 'That photo could not be opened. Take it again, or use a screenshot of it.');
+    throw new ValidationError('image', 'photoUnreadable');
   }
 
   const uploadId = crypto.randomUUID();

@@ -1,12 +1,14 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { getLocale } from '@/i18n/server';
 import { passwordError, replaceTemporaryPassword } from '@/lib/auth/accounts';
 import { getSessionState } from '@/lib/auth/viewer';
-import { ValidationError } from '@/lib/errors';
+import { checkText, errorText, ValidationError } from '@/lib/errors';
 import { formText, nextFormState, repeatError, type FormState } from '@/lib/form-state';
 
 export async function changePasswordAction(prev: FormState, formData: FormData): Promise<FormState> {
+  const locale = await getLocale();
   const state = await getSessionState();
   if (!state) redirect('/login');
   if (!state.mustChangePassword) redirect('/');
@@ -14,8 +16,8 @@ export async function changePasswordAction(prev: FormState, formData: FormData):
   const password = formText(formData, 'password');
   const confirm = formText(formData, 'confirm');
   const fieldErrors: Record<string, string> = {};
-  const passwordProblem = passwordError(password);
-  const repeatProblem = repeatError(password, confirm);
+  const passwordProblem = checkText(passwordError(password), locale);
+  const repeatProblem = repeatError(password, confirm, locale);
   if (passwordProblem) fieldErrors.password = passwordProblem;
   else if (repeatProblem) fieldErrors.confirm = repeatProblem;
   if (Object.keys(fieldErrors).length > 0) return nextFormState(prev, { fieldErrors });
@@ -24,7 +26,7 @@ export async function changePasswordAction(prev: FormState, formData: FormData):
     await replaceTemporaryPassword(state.viewer.id, password, state.sessionId);
   } catch (error) {
     if (error instanceof ValidationError) {
-      return nextFormState(prev, { fieldErrors: { [error.field]: error.message } });
+      return nextFormState(prev, { fieldErrors: { [error.field]: errorText(error, await getLocale()) } });
     }
     throw error;
   }

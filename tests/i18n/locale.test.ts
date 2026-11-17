@@ -49,3 +49,19 @@ describe('isLocale', () => {
     expect(isLocale(undefined)).toBe(false);
   });
 });
+
+describe('localeFromRequest', () => {
+  const request = (headers: Record<string, string>) => new Request('http://localhost/api/x', { headers });
+
+  it('reads the lang cookie, then the browser languages', async () => {
+    const { localeFromRequest } = await import('@/i18n/request');
+    expect(localeFromRequest(request({ cookie: 'a=1; lang=ms; b=2', 'accept-language': 'en-US' }), null)).toBe('ms');
+    expect(localeFromRequest(request({ 'accept-language': 'ms-MY' }), null)).toBe('ms');
+    expect(localeFromRequest(request({}), null)).toBe('en');
+  });
+
+  it('puts the saved choice first', async () => {
+    const { localeFromRequest } = await import('@/i18n/request');
+    expect(localeFromRequest(request({ cookie: 'lang=en' }), 'ms')).toBe('ms');
+  });
+});

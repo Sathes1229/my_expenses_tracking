@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { budgets, receiptUploads, transactionItems, transactions, user } from '@/db/schema';
 import type { Viewer } from '@/lib/auth/viewer';
-import { ForbiddenError, ValidationError } from '@/lib/errors';
+import { ForbiddenError, ValidationError, type ErrorKey } from '@/lib/errors';
 import { formatRM } from './money';
 import { evaluateBudgetAlerts } from './notifications';
 import { monthKey, monthRange } from './time';
@@ -65,32 +65,32 @@ type Clean = {
   items: ItemInput[];
 };
 
-function optionalText(raw: string | undefined, max: number, field: string, label: string): string | null {
+function optionalText(raw: string | undefined, max: number, field: string, tooLong: ErrorKey): string | null {
   const text = (raw ?? '').trim();
   if (!text) return null;
-  if (text.length > max) throw new ValidationError(field, `${label} can be at most ${max} characters.`);
+  if (text.length > max) throw new ValidationError(field, tooLong, { max });
   return text;
 }
 
 function cleanItems(items: ItemInput[]): ItemInput[] {
-  if (items.length > ITEMS_MAX) throw new ValidationError('items', `Add at most ${ITEMS_MAX} items.`);
+  if (items.length > ITEMS_MAX) throw new ValidationError('items', 'tooManyItems', { max: ITEMS_MAX });
   return items.map((item, i) => {
     const name = item.name.trim();
-    if (!name) throw new ValidationError(`items.${i}.name`, 'Enter the item name.');
+    if (!name) throw new ValidationError(`items.${i}.name`, 'enterItemName');
     if (name.length > ITEM_NAME_MAX) {
-      throw new ValidationError(`items.${i}.name`, `Use ${ITEM_NAME_MAX} characters or fewer.`);
+      throw new ValidationError(`items.${i}.name`, 'tooLong', { max: ITEM_NAME_MAX });
     }
     if (!Number.isFinite(item.quantity) || item.quantity <= 0) {
-      throw new ValidationError(`items.${i}.quantity`, 'Enter a quantity above 0.');
+      throw new ValidationError(`items.${i}.quantity`, 'quantityAboveZero');
     }
     if (!Number.isSafeInteger(item.unitPriceSen) || item.unitPriceSen < 0) {
-      throw new ValidationError(`items.${i}.unitPrice`, 'Enter the price of one, RM 0.00 or more.');
+      throw new ValidationError(`items.${i}.unitPrice`, 'unitPriceRange');
     }
     const lineTotalSen = Number.isNaN(item.lineTotalSen)
       ? Math.round(item.quantity * item.unitPriceSen)
       : item.lineTotalSen;
     if (!Number.isSafeInteger(lineTotalSen) || lineTotalSen < 0) {
-      throw new ValidationError(`items.${i}.lineTotal`, 'Enter the line total, RM 0.00 or more.');
+      throw new ValidationError(`items.${i}.lineTotal`, 'lineTotalRange');
     }
     return { name, quantity: item.quantity, unitPriceSen: item.unitPriceSen, lineTotalSen };
   });
@@ -99,29 +99,29 @@ function cleanItems(items: ItemInput[]): ItemInput[] {
 /** Everything but the budget, which depends on the row being replaced. */
 function clean(input: TransactionInput): Omit<Clean, 'budgetId'> {
   const merchant = input.merchant.trim().replace(/\s+/g, ' ');
-  if (!merchant) throw new ValidationError('merchant', 'Enter where the money was spent.');
+  if (!merchant) throw new ValidationError('merchant', 'enterMerchant');
   if (merchant.length > MERCHANT_MAX) {
-    throw new ValidationError('merchant', `Use ${MERCHANT_MAX} characters or fewer.`);
+    throw new ValidationError('merchant', 'tooLong', { max: MERCHANT_MAX });
   }
   if (!Number.isSafeInteger(input.totalSen) || input.totalSen <= 0) {
-    throw new ValidationError('total', 'Enter a total above RM 0.00.');
+    throw new ValidationError('total', 'totalAboveZero');
   }
   if (input.totalSen > TOTAL_MAX_SEN) {
-    throw new ValidationError('total', `Enter a total up to ${formatRM(TOTAL_MAX_SEN)}.`);
+    throw new ValidationError('total', 'totalMax', { max: formatRM(TOTAL_MAX_SEN) });
   }
   const at = input.occurredAt.getTime();
-  if (Number.isNaN(at)) throw new ValidationError('occurredAt', 'Enter a valid date and time.');
-  if (at > Date.now() + DAY_MS) throw new ValidationError('occurredAt', 'The date cannot be more than a day ahead.');
+  if (Number.isNaN(at)) throw new ValidationError('occurredAt', 'validDateTime');
+  if (at > Date.now() + DAY_MS) throw new ValidationError('occurredAt', 'dateTooFarAhead');
   if (!PAYMENT_METHODS.includes(input.paymentMethod)) {
-    throw new ValidationError('paymentMethod', 'Choose how it was paid.');
+    throw new ValidationError('paymentMethod', 'choosePayment');
   }
   return {
     merchant,
     occurredAt: at,
-    receiptNumber: optionalText(input.receiptNumber, RECEIPT_NUMBER_MAX, 'receiptNumber', 'The receipt number'),
+    receiptNumber: optionalText(input.receiptNumber, RECEIPT_NUMBER_MAX, 'receiptNumber', 'receiptNumberTooLong'),
     totalSen: input.totalSen,
     paymentMethod: input.paymentMethod,
-    note: optionalText(input.note, NOTE_MAX, 'note', 'The note'),
+    note: optionalText(input.note, NOTE_MAX, 'note', 'noteTooLong'),
     items: cleanItems(input.items),
   };
 }
@@ -131,7 +131,7 @@ function checkBudget(tx: Tx, budgetId: string | null, keep?: string | null): str
   if (budgetId === null) return null;
   if (budgetId === keep) return budgetId;
   const row = tx.select({ archivedAt: budgets.archivedAt }).from(budgets).where(eq(budgets.id, budgetId)).get();
-  if (!row || row.archivedAt !== null) throw new ValidationError('budget', 'Choose a budget from the list.');
+  if (!row || row.archivedAt !== null) throw new ValidationError('budget', 'chooseBudget');
   return budgetId;
 }
 
@@ -197,8 +197,8 @@ function owned(tx: Tx, viewer: Viewer, id: string) {
     .from(transactions)
     .where(eq(transactions.id, id))
     .get();
-  if (!row) throw new ValidationError('transaction', 'That transaction is not in the app any more.');
-  if (!canEditRow(viewer, row.createdBy)) throw new ForbiddenError('You can only change transactions you added.');
+  if (!row) throw new ValidationError('transaction', 'transactionGone');
+  if (!canEditRow(viewer, row.createdBy)) throw new ForbiddenError('onlyOwnTransactions');
   return row;
 }
 

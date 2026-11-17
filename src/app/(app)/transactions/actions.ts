@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireViewer } from '@/lib/auth/viewer';
-import { ForbiddenError, ValidationError } from '@/lib/errors';
+import { getLocale } from '@/i18n/server';
+import { errorText, ForbiddenError, ValidationError } from '@/lib/errors';
 import { formText, nextFormState, type FormState } from '@/lib/form-state';
 import { parseTransactionForm } from '@/lib/transaction-form-data';
 import { createTransaction, deleteTransaction, updateTransaction, type TransactionInput } from '@/lib/transactions';
@@ -30,12 +31,13 @@ async function attempt(prev: FormState, formData: FormData, change: () => Promis
   try {
     await change();
   } catch (error) {
+    const locale = await getLocale();
     if (error instanceof ValidationError) {
       return FIELDS.has(error.field) || error.field.startsWith('items')
-        ? nextFormState(prev, { fieldErrors: { [error.field]: error.message }, values })
-        : nextFormState(prev, { message: error.message, values });
+        ? nextFormState(prev, { fieldErrors: { [error.field]: errorText(error, locale) }, values })
+        : nextFormState(prev, { message: errorText(error, locale), values });
     }
-    if (error instanceof ForbiddenError) return nextFormState(prev, { message: error.message, values });
+    if (error instanceof ForbiddenError) return nextFormState(prev, { message: errorText(error, locale), values });
     throw error;
   }
   // The list, the edit pages and the budget meters are kept in the router between visits; this drops them so the redirect shows the change.
@@ -50,7 +52,7 @@ function goToMonth(input: TransactionInput): never {
 
 export async function createTransactionAction(prev: FormState, formData: FormData): Promise<FormState> {
   const viewer = await requireViewer();
-  const parsed = parseTransactionForm(formData);
+  const parsed = parseTransactionForm(formData, await getLocale());
   if (!parsed.ok) return nextFormState(prev, { fieldErrors: parsed.errors, values: submitted(formData) });
   const result = await attempt(prev, formData, async () => {
     await createTransaction(viewer, parsed.input);
@@ -62,7 +64,7 @@ export async function createTransactionAction(prev: FormState, formData: FormDat
 export async function updateTransactionAction(prev: FormState, formData: FormData): Promise<FormState> {
   const viewer = await requireViewer();
   const id = formText(formData, 'transactionId');
-  const parsed = parseTransactionForm(formData);
+  const parsed = parseTransactionForm(formData, await getLocale());
   if (!parsed.ok) return nextFormState(prev, { fieldErrors: parsed.errors, values: submitted(formData) });
   const result = await attempt(prev, formData, () => updateTransaction(viewer, id, parsed.input));
   if (result.done) goToMonth(parsed.input);

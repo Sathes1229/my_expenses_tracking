@@ -3,7 +3,7 @@ import { and, eq, isNull, ne } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { account, chatMessages, session, user } from '@/db/schema';
 import { isLocale } from '@/i18n/locale';
-import { ValidationError } from '@/lib/errors';
+import { ValidationError, type ErrorKey } from '@/lib/errors';
 import { displayNameError, passwordError } from './accounts';
 import { getAuth } from './auth';
 import { assertOwner, type Role, type Viewer } from './viewer';
@@ -12,7 +12,6 @@ export type Person = { id: string; displayName: string; username: string; role: 
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-const GONE = 'That person is not in the app any more.';
 
 // Lower-case letters and digits without look-alikes (0/o, 1/l/i), so it can be read out or typed on a phone.
 const TEMP_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -26,13 +25,13 @@ function temporaryPassword(): string {
 }
 
 /** The member or guest the owner is acting on, read inside the transaction that changes them. */
-function targetPerson(tx: Tx, userId: string, ownerMessage: string): { id: string } {
+function targetPerson(tx: Tx, userId: string, ownerMessage: ErrorKey): { id: string } {
   const row = tx
     .select({ id: user.id, role: user.role, removedAt: user.removedAt })
     .from(user)
     .where(eq(user.id, userId))
     .get();
-  if (!row || row.removedAt) throw new ValidationError('person', GONE);
+  if (!row || row.removedAt) throw new ValidationError('person', 'personGone');
   if (row.role === 'owner') throw new ValidationError('person', ownerMessage);
   return { id: row.id };
 }
@@ -81,9 +80,9 @@ export async function listPeople(owner: Viewer): Promise<Person[]> {
  */
 export async function changeRole(owner: Viewer, userId: string, role: 'member' | 'guest'): Promise<void> {
   assertOwner(owner);
-  if (role !== 'member' && role !== 'guest') throw new ValidationError('role', 'Choose Member or Guest.');
+  if (role !== 'member' && role !== 'guest') throw new ValidationError('role', 'chooseRole');
   db.transaction((tx) => {
-    targetPerson(tx, userId, "The owner's role cannot be changed.");
+    targetPerson(tx, userId, 'ownerRoleFixed');
     tx.update(user).set({ role }).where(eq(user.id, userId)).run();
     if (role === 'guest') tx.delete(chatMessages).where(eq(chatMessages.userId, userId)).run();
   });
@@ -99,7 +98,7 @@ export async function resetPassword(owner: Viewer, userId: string): Promise<{ te
   const passwordHash = await (await getAuth().$context).password.hash(tempPassword);
   // One synchronous transaction: password, flag and sessions change together or not at all.
   db.transaction((tx) => {
-    targetPerson(tx, userId, 'The owner changes their own password in Profile.');
+    targetPerson(tx, userId, 'ownerOwnPassword');
     setPassword(tx, userId, passwordHash);
     tx.update(user).set({ mustChangePassword: true }).where(eq(user.id, userId)).run();
     endSessions(tx, userId);
@@ -111,7 +110,7 @@ export async function resetPassword(owner: Viewer, userId: string): Promise<{ te
 export async function removePerson(owner: Viewer, userId: string): Promise<void> {
   assertOwner(owner);
   db.transaction((tx) => {
-    targetPerson(tx, userId, 'The owner cannot be removed.');
+    targetPerson(tx, userId, 'ownerCannotBeRemoved');
     tx.update(user).set({ removedAt: new Date() }).where(eq(user.id, userId)).run();
     endSessions(tx, userId);
   });
@@ -128,7 +127,7 @@ export async function updateProfile(viewer: Viewer, input: { displayName: string
 
 /** Saves the language the person picked in Profile, used on every device they sign in on. */
 export async function setLocale(viewer: Viewer, locale: string): Promise<void> {
-  if (!isLocale(locale)) throw new ValidationError('locale', 'Choose Bahasa Melayu or English.');
+  if (!isLocale(locale)) throw new ValidationError('locale', 'chooseLanguage');
   db.update(user)
     .set({ locale })
     .where(and(eq(user.id, viewer.id), isNull(user.removedAt)))
@@ -154,7 +153,7 @@ export async function changeOwnPassword(
     !!current &&
     !!credential?.password &&
     (await ctx.password.verify({ hash: credential.password, password: current }));
-  if (!matches) throw new ValidationError('current', 'That is not your current password.');
+  if (!matches) throw new ValidationError('current', 'wrongCurrentPassword');
 
   const passwordHash = await ctx.password.hash(next);
   db.transaction((tx) => {

@@ -1,5 +1,7 @@
 import { stateFromHeaders } from '@/lib/auth/viewer';
+import { localeFromRequest } from '@/i18n/request';
 import { readReceiptImage } from '@/lib/uploads';
+import { say } from '@/lib/errors';
 
 /**
  * A stored receipt photo, for whoever readReceiptImage allows. Anyone else gets 404, the same as
@@ -8,7 +10,7 @@ import { readReceiptImage } from '@/lib/uploads';
  */
 export async function GET(request: Request, ctx: RouteContext<'/api/receipts/[id]'>): Promise<Response> {
   const state = await stateFromHeaders(request.headers);
-  if (!state) return new Response('Sign in to see this receipt.', { status: 401 });
+  if (!state) return new Response(say(localeFromRequest(request, null), 'signInToSeeReceipt'), { status: 401 });
   const { id } = await ctx.params;
   const image = state.mustChangePassword ? null : await readReceiptImage(state.viewer, id);
   if (!image) return new Response('Not Found', { status: 404 });

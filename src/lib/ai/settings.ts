@@ -61,11 +61,11 @@ export async function getAiSettings(): Promise<{
 
 function checkModel(modelId: string, field: string, needsVision: boolean) {
   const model = findModel(modelId);
-  if (!model) throw new ValidationError(field, 'Choose a model from the list.');
+  if (!model) throw new ValidationError(field, 'chooseModel');
   if (!configuredProviders().includes(model.provider)) {
-    throw new ValidationError(field, 'That model needs a key in the .env file first.');
+    throw new ValidationError(field, 'modelNeedsEnvKey');
   }
-  if (needsVision && !model.vision) throw new ValidationError(field, 'That model cannot read images. Choose another.');
+  if (needsVision && !model.vision) throw new ValidationError(field, 'modelNoVision');
 }
 
 export async function setChatModel(owner: Viewer, modelId: string): Promise<void> {
@@ -84,7 +84,7 @@ export async function setReceiptModel(owner: Viewer, modelId: string): Promise<v
 export async function setDailyBudget(owner: Viewer, usd: string): Promise<void> {
   assertOwner(owner);
   const match = USD_AMOUNT.exec(usd.trim().toLowerCase());
-  const invalid = new ValidationError('dailyBudget', 'Enter an amount from 0.01 to 1000 US dollars, for example 2.50.');
+  const invalid = new ValidationError('dailyBudget', 'dailyBudgetInvalid');
   if (!match) throw invalid;
   const dollars = Number(match[1]);
   if (!Number.isSafeInteger(dollars) || dollars > 1000) throw invalid;

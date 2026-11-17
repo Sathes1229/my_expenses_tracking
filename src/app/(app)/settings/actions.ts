@@ -1,10 +1,11 @@
 'use server';
 
 import { refresh } from 'next/cache';
+import { getLocale } from '@/i18n/server';
 import { createInvite, inviteLink, revokeInvite } from '@/lib/auth/invites';
 import { changeRole, removePerson, resetPassword } from '@/lib/auth/people';
 import { requireOwner } from '@/lib/auth/viewer';
-import { ValidationError } from '@/lib/errors';
+import { errorText, say, ValidationError } from '@/lib/errors';
 import { formText, nextFormState, type FormState } from '@/lib/form-state';
 
 // Every action here checks the session itself (requireOwner): a server action is reachable by a
@@ -19,7 +20,7 @@ async function attempt(prev: FormState, change: () => Promise<void>): Promise<Fo
   try {
     await change();
   } catch (error) {
-    if (error instanceof ValidationError) return nextFormState(prev, { message: error.message });
+    if (error instanceof ValidationError) return nextFormState(prev, { message: errorText(error, await getLocale()) });
     throw error;
   }
   // The lists on the page are read per request, so re-render them in this same response.
@@ -28,10 +29,11 @@ async function attempt(prev: FormState, change: () => Promise<void>): Promise<Fo
 }
 
 export async function createInviteAction(prev: InviteFormState, formData: FormData): Promise<InviteFormState> {
+  const locale = await getLocale();
   const owner = await requireOwner();
   const role = formText(formData, 'role');
   if (role !== 'member' && role !== 'guest') {
-    return nextFormState(prev, { fieldErrors: { role: 'Choose Member or Guest.' } });
+    return nextFormState(prev, { fieldErrors: { role: say(locale, 'chooseRole') } });
   }
   const { token } = await createInvite(owner, role);
   refresh();
@@ -44,9 +46,10 @@ export async function revokeInviteAction(prev: FormState, formData: FormData): P
 }
 
 export async function changeRoleAction(prev: FormState, formData: FormData): Promise<FormState> {
+  const locale = await getLocale();
   const owner = await requireOwner();
   const role = formText(formData, 'role');
-  if (role !== 'member' && role !== 'guest') return nextFormState(prev, { message: 'Choose Member or Guest.' });
+  if (role !== 'member' && role !== 'guest') return nextFormState(prev, { message: say(locale, 'chooseRole') });
   return attempt(prev, () => changeRole(owner, formText(formData, 'userId'), role));
 }
 
@@ -62,7 +65,7 @@ export async function resetPasswordAction(prev: ResetFormState, formData: FormDa
     const { tempPassword } = await resetPassword(owner, formText(formData, 'userId'));
     return { ...nextFormState(prev, { done: true }), tempPassword };
   } catch (error) {
-    if (error instanceof ValidationError) return nextFormState(prev, { message: error.message });
+    if (error instanceof ValidationError) return nextFormState(prev, { message: errorText(error, await getLocale()) });
     throw error;
   }
 }

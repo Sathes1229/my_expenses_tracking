@@ -26,35 +26,35 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 function checkName(tx: Tx, raw: string, exceptId?: string): string {
   const name = raw.trim().replace(/\s+/g, ' ');
-  if (!name) throw new ValidationError('name', 'Enter a name for the budget.');
-  if (name.length > NAME_MAX) throw new ValidationError('name', `Use ${NAME_MAX} characters or fewer.`);
+  if (!name) throw new ValidationError('name', 'budgetNameMissing');
+  if (name.length > NAME_MAX) throw new ValidationError('name', 'tooLong', { max: NAME_MAX });
   const clash = tx
     .select({ id: budgets.id })
     .from(budgets)
     .where(and(isNull(budgets.archivedAt), sql`lower(${budgets.name}) = lower(${name})`))
     .all()
     .some((row) => row.id !== exceptId);
-  if (clash) throw new ValidationError('name', 'Another budget already has that name.');
+  if (clash) throw new ValidationError('name', 'budgetNameTaken');
   return name;
 }
 
 function checkAllocation(sen: number): number {
   if (!Number.isSafeInteger(sen) || sen < 0) {
-    throw new ValidationError('allocation', 'Enter an amount of RM 0.00 or more.');
+    throw new ValidationError('allocation', 'budgetAmountNegative');
   }
   return sen;
 }
 
 function checkThreshold(pct: number): number {
   if (!Number.isInteger(pct) || pct < 1 || pct > 100) {
-    throw new ValidationError('threshold', 'Enter a whole number from 1 to 100.');
+    throw new ValidationError('threshold', 'thresholdRange');
   }
   return pct;
 }
 
 function activeBudget(tx: Tx, id: string) {
   const row = tx.select().from(budgets).where(eq(budgets.id, id)).get();
-  if (!row || row.archivedAt !== null) throw new ValidationError('budget', 'That budget is not in the app any more.');
+  if (!row || row.archivedAt !== null) throw new ValidationError('budget', 'budgetGone');
   return row;
 }
 
