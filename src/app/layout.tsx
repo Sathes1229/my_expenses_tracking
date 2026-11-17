@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
+import { Suspense } from "react";
 import { themeScript } from "@/components/theme-script";
 import { ThemeSync } from "@/components/theme-sync";
+import { LocaleRoot } from "@/i18n/locale-root";
 import "./globals.css";
 
 // Variable font: one file covers every weight used (400 to 600).
@@ -35,7 +37,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="flex min-h-full flex-col bg-canvas text-ink">
         <ThemeSync />
-        {children}
+        {/* The language comes from the request, so everything below waits for it. */}
+        <Suspense fallback={null}>
+          <LocaleRoot>{children}</LocaleRoot>
+        </Suspense>
       </body>
     </html>
   );

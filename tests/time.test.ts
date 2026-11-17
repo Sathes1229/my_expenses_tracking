@@ -27,6 +27,12 @@ describe('time helpers (Asia/Kuala_Lumpur)', () => {
     expect(monthLabel('2026-11')).toBe('November 2026');
   });
 
+  it('labels a month in Malay', () => {
+    expect(monthLabel('2026-08', 'ms')).toBe('Ogos 2026');
+    expect(monthLabel('2026-03', 'ms')).toBe('Mac 2026');
+    expect(monthLabel('2026-08')).toBe('August 2026');
+  });
+
   it('accepts a YYYY-MM month parameter and falls back to the current month otherwise', () => {
     const now = monthKey(new Date());
     expect(parseMonthParam('2026-03')).toBe('2026-03');

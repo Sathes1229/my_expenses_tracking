@@ -4,12 +4,19 @@ import { redirect } from 'next/navigation';
 import { cache } from 'react';
 import { db } from '@/db/client';
 import { user } from '@/db/schema';
+import { isLocale, type Locale } from '@/i18n/locale';
 import { ForbiddenError } from '@/lib/errors';
 import { getAuth } from './auth';
 
 export type Role = 'owner' | 'member' | 'guest';
 export type Viewer = { id: string; role: Role; displayName: string };
-export type SessionState = { viewer: Viewer; mustChangePassword: boolean; sessionId: string };
+export type SessionState = {
+  viewer: Viewer;
+  mustChangePassword: boolean;
+  sessionId: string;
+  /** The language picked in Profile; null until the person picks one. */
+  locale: Locale | null;
+};
 
 /**
  * The session a request's cookie belongs to; null when signed out or removed. Route handlers use it
@@ -29,6 +36,7 @@ export async function stateFromHeaders(requestHeaders: Headers): Promise<Session
       role: user.role,
       mustChangePassword: user.mustChangePassword,
       removedAt: user.removedAt,
+      locale: user.locale,
     })
     .from(user)
     .where(eq(user.id, found.user.id))
@@ -38,6 +46,7 @@ export async function stateFromHeaders(requestHeaders: Headers): Promise<Session
     viewer: { id: row.id, role: row.role, displayName: row.name },
     mustChangePassword: row.mustChangePassword,
     sessionId: found.session.id,
+    locale: isLocale(row.locale) ? row.locale : null,
   };
 }
 

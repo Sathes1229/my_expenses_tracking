@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto';
 import { and, eq, isNull, ne } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { account, chatMessages, session, user } from '@/db/schema';
+import { isLocale } from '@/i18n/locale';
 import { ValidationError } from '@/lib/errors';
 import { displayNameError, passwordError } from './accounts';
 import { getAuth } from './auth';
@@ -121,6 +122,15 @@ export async function updateProfile(viewer: Viewer, input: { displayName: string
   if (problem) throw new ValidationError('displayName', problem);
   db.update(user)
     .set({ name: input.displayName.trim() })
+    .where(and(eq(user.id, viewer.id), isNull(user.removedAt)))
+    .run();
+}
+
+/** Saves the language the person picked in Profile, used on every device they sign in on. */
+export async function setLocale(viewer: Viewer, locale: string): Promise<void> {
+  if (!isLocale(locale)) throw new ValidationError('locale', 'Choose Bahasa Melayu or English.');
+  db.update(user)
+    .set({ locale })
     .where(and(eq(user.id, viewer.id), isNull(user.removedAt)))
     .run();
 }

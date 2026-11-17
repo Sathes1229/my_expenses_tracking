@@ -1,4 +1,9 @@
+import type { Locale } from '@/i18n/locale';
+
 export const TZ = 'Asia/Kuala_Lumpur';
+
+/** The Intl locale behind each app language: British English and Malaysian Malay. */
+const INTL: Record<Locale, string> = { en: 'en-GB', ms: 'ms-MY' };
 
 const parts = new Intl.DateTimeFormat('en-CA', {
   timeZone: TZ,
@@ -62,9 +67,9 @@ export function parseMonthParam(value: string | undefined): string {
   return value !== undefined && MONTH_PARAM.test(value) ? value : monthKey(new Date());
 }
 
-export function monthLabel(month: string): string {
+export function monthLabel(month: string, locale: Locale = 'en'): string {
   const [y, m] = month.split('-').map(Number);
-  const name = new Intl.DateTimeFormat('en-GB', { month: 'long', timeZone: 'UTC' }).format(
+  const name = new Intl.DateTimeFormat(INTL[locale], { month: 'long', timeZone: 'UTC' }).format(
     new Date(Date.UTC(y, m - 1, 1)),
   );
   return `${name} ${y}`;
@@ -83,25 +88,17 @@ export function timeKey(d: Date): string {
   return `${p.hour}:${p.minute}`;
 }
 
-const whenShort = new Intl.DateTimeFormat('en-GB', {
-  timeZone: TZ,
-  day: 'numeric',
-  month: 'short',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
-const whenLong = new Intl.DateTimeFormat('en-GB', {
-  timeZone: TZ,
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
+const whenOptions = {
+  short: { timeZone: TZ, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' },
+  long: { timeZone: TZ, day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' },
+} satisfies Record<string, Intl.DateTimeFormatOptions>;
+
+const when = {
+  short: { en: new Intl.DateTimeFormat(INTL.en, whenOptions.short), ms: new Intl.DateTimeFormat(INTL.ms, whenOptions.short) },
+  long: { en: new Intl.DateTimeFormat(INTL.en, whenOptions.long), ms: new Intl.DateTimeFormat(INTL.ms, whenOptions.long) },
+};
 
 /** "3 Nov, 12:00" in Malaysia time. */
-export const formatWhen = (d: Date) => whenShort.format(d);
+export const formatWhen = (d: Date, locale: Locale = 'en') => when.short[locale].format(d);
 /** "3 November 2026, 12:00" in Malaysia time. */
-export const formatWhenLong = (d: Date) => whenLong.format(d);
+export const formatWhenLong = (d: Date, locale: Locale = 'en') => when.long[locale].format(d);

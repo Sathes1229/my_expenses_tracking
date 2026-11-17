@@ -28,6 +28,7 @@ function createAuth() {
         role: { type: ['owner', 'member', 'guest'], required: true, input: false },
         mustChangePassword: { type: 'boolean', required: true, defaultValue: false, input: false },
         removedAt: { type: 'date', required: false, input: false },
+        locale: { type: ['en', 'ms'], required: false, input: false },
       },
     },
     session: {

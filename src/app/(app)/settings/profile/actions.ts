@@ -1,12 +1,14 @@
 'use server';
 
 import { refresh } from 'next/cache';
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { passwordError } from '@/lib/auth/accounts';
-import { changeOwnPassword, updateProfile } from '@/lib/auth/people';
+import { LOCALE_COOKIE } from '@/i18n/locale';
+import { changeOwnPassword, setLocale, updateProfile } from '@/lib/auth/people';
 import { beginLoginAttempt, clientIp, markLoginSucceeded } from '@/lib/auth/throttle';
 import { getSessionState, requireViewer } from '@/lib/auth/viewer';
+import { env } from '@/lib/env';
 import { ValidationError } from '@/lib/errors';
 import { formText, nextFormState, repeatError, waitText, type FormState } from '@/lib/form-state';
 
@@ -62,5 +64,29 @@ export async function changePasswordAction(prev: FormState, formData: FormData):
     return nextFormState(prev, { fieldErrors: { [error.field]: error.message } });
   }
   await markLoginSucceeded(attempt.attemptIds);
+  return nextFormState(prev, { done: true });
+}
+
+/**
+ * Saves the language on the account (every device) and in a cookie, so the sign-in page keeps it
+ * after signing out.
+ */
+export async function setLanguageAction(prev: FormState, formData: FormData): Promise<FormState> {
+  const viewer = await requireViewer();
+  const locale = formText(formData, 'locale');
+  try {
+    await setLocale(viewer, locale);
+  } catch (error) {
+    if (error instanceof ValidationError) return nextFormState(prev, { message: error.message });
+    throw error;
+  }
+  (await cookies()).set(LOCALE_COOKIE, locale, {
+    path: '/',
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: 'lax',
+    httpOnly: true,
+    secure: env.APP_URL?.startsWith('https://') ?? false,
+  });
+  refresh();
   return nextFormState(prev, { done: true });
 }

@@ -224,6 +224,8 @@ export const user = sqliteTable(
     mustChangePassword: integer('must_change_password', { mode: 'boolean' }).default(false).notNull(),
     // Set when the owner removes the person; their past transactions stay.
     removedAt: integer('removed_at', { mode: 'timestamp_ms' }),
+    // 'en' or 'ms' once the person picks a language in Profile; null follows the browser.
+    locale: text('locale', { enum: ['en', 'ms'] }),
   },
   // The database itself refuses a second owner, so two setup submissions cannot both win.
   (t) => [uniqueIndex('user_single_owner_uq').on(t.role).where(sql`role = 'owner'`)],
