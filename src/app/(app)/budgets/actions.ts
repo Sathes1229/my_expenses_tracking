@@ -3,6 +3,8 @@
 import { refresh } from 'next/cache';
 import { requireOwner } from '@/lib/auth/viewer';
 import { allocationFor, archiveBudget, createBudget, updateBudget } from '@/lib/budgets';
+import { createStarterBudgets, STARTER_KEYS } from '@/lib/starter-budgets';
+import { parseStarterForm } from '@/lib/starter-form-data';
 import { getLocale } from '@/i18n/server';
 import type { Locale } from '@/i18n/locale';
 import { errorText, say, ValidationError } from '@/lib/errors';
@@ -98,4 +100,30 @@ export async function updateBudgetAction(prev: FormState, formData: FormData): P
 export async function archiveBudgetAction(prev: FormState, formData: FormData): Promise<FormState> {
   const owner = await requireOwner();
   return attempt(prev, formData, () => archiveBudget(owner, formText(formData, 'budgetId')));
+}
+
+/** What was ticked and typed in the starter form, so a failed submit puts it back. */
+function starterValues(formData: FormData): Record<string, string> {
+  const values: Record<string, string> = {
+    pick: formData.getAll('pick').filter((v): v is string => typeof v === 'string').join(','),
+  };
+  for (const key of STARTER_KEYS) values[`amount_${key}`] = formText(formData, `amount_${key}`);
+  return values;
+}
+
+/** Creates the ticked common budgets for a household that has none yet. All or nothing. */
+export async function createStarterBudgetsAction(prev: FormState, formData: FormData): Promise<FormState> {
+  const owner = await requireOwner();
+  const locale = await getLocale();
+  const values = starterValues(formData);
+  const parsed = parseStarterForm(formData, locale);
+  if (!parsed.ok) return nextFormState(prev, { fieldErrors: parsed.errors, values });
+  try {
+    await createStarterBudgets(owner, parsed.picks);
+  } catch (error) {
+    if (error instanceof ValidationError) return nextFormState(prev, { message: errorText(error, locale), values });
+    throw error;
+  }
+  refresh();
+  return nextFormState(prev, { done: true });
 }

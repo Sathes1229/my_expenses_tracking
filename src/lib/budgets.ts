@@ -22,7 +22,7 @@ export type BudgetSummary = {
 const NAME_MAX = 60;
 const DEFAULT_THRESHOLD = 80;
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 function checkName(tx: Tx, raw: string, exceptId?: string): string {
   const name = raw.trim().replace(/\s+/g, ' ');
@@ -69,19 +69,26 @@ function setAllocation(tx: Tx, budgetId: string, allocationSen: number) {
     .run();
 }
 
-export async function createBudget(
-  owner: Viewer,
-  input: { name: string; allocationSen: number; thresholdPct?: number },
-): Promise<{ id: string }> {
+export type NewBudget = { name: string; allocationSen: number; thresholdPct?: number };
+
+/** Checks and inserts one budget inside the caller's transaction, so several can be all or nothing. */
+export function insertBudget(tx: Tx, input: NewBudget): { id: string } {
+  const name = checkName(tx, input.name);
+  const allocationSen = checkAllocation(input.allocationSen);
+  const thresholdPct = checkThreshold(input.thresholdPct ?? DEFAULT_THRESHOLD);
+  const { id } = tx.insert(budgets).values({ name, thresholdPct }).returning({ id: budgets.id }).get();
+  setAllocation(tx, id, allocationSen);
+  return { id };
+}
+
+export async function createBudget(owner: Viewer, input: NewBudget): Promise<{ id: string }> {
   assertOwner(owner);
-  return db.transaction((tx) => {
-    const name = checkName(tx, input.name);
-    const allocationSen = checkAllocation(input.allocationSen);
-    const thresholdPct = checkThreshold(input.thresholdPct ?? DEFAULT_THRESHOLD);
-    const { id } = tx.insert(budgets).values({ name, thresholdPct }).returning({ id: budgets.id }).get();
-    setAllocation(tx, id, allocationSen);
-    return { id };
-  });
+  return db.transaction((tx) => insertBudget(tx, input));
+}
+
+/** Whether the household has ever had a budget, archived ones included. */
+export async function hasAnyBudget(): Promise<boolean> {
+  return db.select({ id: budgets.id }).from(budgets).limit(1).get() !== undefined;
 }
 
 export async function updateBudget(

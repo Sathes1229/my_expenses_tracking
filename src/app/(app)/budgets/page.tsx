@@ -3,10 +3,12 @@ import { Suspense } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { requireViewer } from '@/lib/auth/viewer';
-import { listBudgetNames, listBudgetSummaries } from '@/lib/budgets';
+import { getMessages } from '@/i18n/server';
+import { hasAnyBudget, listBudgetNames, listBudgetSummaries } from '@/lib/budgets';
 import { monthLabel, parseMonthParam } from '@/lib/time';
 import { AddBudget } from './budget-forms';
 import { BudgetList } from './budget-list';
+import { StarterBudgets } from './starter-budgets';
 
 export const metadata: Metadata = { title: 'Budgets | My Expenses' };
 
@@ -40,6 +42,9 @@ async function Budgets({ searchParams }: Pick<PageProps<'/budgets'>, 'searchPara
   const month = parseMonthParam(typeof raw === 'string' ? raw : undefined);
   const budgets = await listBudgetSummaries(viewer, month);
   const isOwner = viewer.role === 'owner';
+  // A household that has never had a budget starts from the common ones; one with only archived
+  // budgets gets the usual empty state.
+  if (isOwner && budgets.length === 0 && !(await hasAnyBudget())) return <FirstBudgets month={monthLabel(month)} />;
 
   return (
     <>
@@ -76,6 +81,24 @@ function GuestBudgets({ names }: { names: { id: string; name: string }[] }) {
             ))}
           </ul>
         )}
+      </div>
+    </>
+  );
+}
+
+/** The owner's first visit: common budgets to tick, and the usual way to add one of their own. */
+async function FirstBudgets({ month }: { month: string }) {
+  const t = (await getMessages()).starter;
+  return (
+    <>
+      <PageHeader title="Budgets" />
+      <p className="mt-1 text-muted">{month}</p>
+      <div className="mt-6">
+        <StarterBudgets />
+      </div>
+      <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <p className="text-muted">{t.orAddOwn}</p>
+        <AddBudget />
       </div>
     </>
   );
