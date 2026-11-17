@@ -108,7 +108,7 @@ export const ms: Messages = {
     noTransactions: 'Tiada transaksi pada {month}.',
     youAddedNone: 'Anda belum menambah sebarang transaksi pada {month}.',
     allTransactionsIn: 'Semua transaksi pada {month}',
-    owedToYou: 'Hutang kepada anda',
+    owedToYou: 'Hutang orang kepada anda',
     nobodyOwes: 'Tiada sesiapa berhutang dengan anda sekarang.',
     openDebts: 'Buka Hutang',
     errorTitle: 'Ringkasan bulan ini tidak dapat dimuatkan.',
