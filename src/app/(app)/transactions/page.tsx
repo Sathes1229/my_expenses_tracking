@@ -8,18 +8,12 @@ import { CameraIcon } from '@/components/icons';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
 import { Select } from '@/components/select';
+import { getMessages } from '@/i18n/server';
 import { requireViewer } from '@/lib/auth/viewer';
 import { listBudgetNames } from '@/lib/budgets';
-import { latestMonth, monthLabel, parseMonthParam, shiftMonth } from '@/lib/time';
-import {
-  listPeople,
-  listTransactions,
-  PAYMENT_LABELS,
-  PAYMENT_METHODS,
-  UNCATEGORISED,
-  type PaymentMethod,
-  type TransactionFilter,
-} from '@/lib/transactions';
+import { latestMonth, monthLabel, shiftMonth } from '@/lib/time';
+import { filterFromQuery, UNCATEGORISED_CHOICE, type FilterChoices } from '@/lib/transaction-filter';
+import { listPeople, listTransactions, PAYMENT_LABELS, PAYMENT_METHODS, UNCATEGORISED } from '@/lib/transactions';
 import { TransactionList } from './transaction-list';
 
 export const metadata: Metadata = { title: 'Transactions | My Expenses' };
@@ -27,21 +21,15 @@ export const metadata: Metadata = { title: 'Transactions | My Expenses' };
 // Blocks on the session read, like the (app) layout.
 export const instant = false;
 
-/** The filter choices as they sit in the address: empty means all, "none" is Uncategorised. */
-type Choices = { budget: string; person: string; method: string };
+const NONE = UNCATEGORISED_CHOICE;
 
-const NONE = 'none';
-
-function text(value: string | string[] | undefined): string {
-  return typeof value === 'string' ? value : '';
-}
-
-function href(month: string, choices: Choices): string {
+/** The month and filters as an address, for this page or (with `path`) for the export. */
+function href(month: string, choices: FilterChoices, path = '/transactions'): string {
   const query = new URLSearchParams({ month });
   if (choices.budget) query.set('budget', choices.budget);
   if (choices.person) query.set('person', choices.person);
   if (choices.method) query.set('method', choices.method);
-  return `/transactions?${query}`;
+  return `${path}?${query}`;
 }
 
 export default function TransactionsPage({ searchParams }: PageProps<'/transactions'>) {
@@ -66,18 +54,10 @@ export default function TransactionsPage({ searchParams }: PageProps<'/transacti
 // Every page checks the session itself: the layout does not re-run on client navigation.
 async function Transactions({ searchParams }: Pick<PageProps<'/transactions'>, 'searchParams'>) {
   const viewer = await requireViewer();
-  const query = await searchParams;
-  const asked = parseMonthParam(text(query.month) || undefined);
+  const { filter, choices } = filterFromQuery(viewer, await searchParams);
+  const { month } = filter;
   const latest = latestMonth();
-  const month = asked > latest ? latest : asked;
-  const method = PAYMENT_METHODS.includes(text(query.method) as PaymentMethod) ? text(query.method) : '';
   const isGuest = viewer.role === 'guest';
-  const choices: Choices = { budget: text(query.budget), person: isGuest ? '' : text(query.person), method };
-
-  const filter: TransactionFilter = { month };
-  if (choices.budget) filter.budgetId = choices.budget === NONE ? null : choices.budget;
-  if (choices.person) filter.personId = choices.person;
-  if (method) filter.paymentMethod = method as PaymentMethod;
 
   const [rows, budgets, people] = await Promise.all([
     listTransactions(viewer, filter),
@@ -181,9 +161,15 @@ async function Transactions({ searchParams }: Pick<PageProps<'/transactions'>, '
           )
         ) : (
           <>
-            <p className="mb-2 text-muted">
-              {rows.length} {rows.length === 1 ? 'transaction' : 'transactions'}, <Money sen={shownSen} className="font-semibold text-ink" /> in total
-            </p>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+              <p className="text-muted">
+                {rows.length} {rows.length === 1 ? 'transaction' : 'transactions'}, <Money sen={shownSen} className="font-semibold text-ink" /> in total
+              </p>
+              {/* A plain link: the browser saves the file the route sends. */}
+              <a href={href(month, choices, '/api/export')} download className="inline-flex min-h-11 items-center font-medium">
+                {(await getMessages()).export.button}
+              </a>
+            </div>
             <TransactionList rows={rows} />
           </>
         )}

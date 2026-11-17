@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { budgets, receiptUploads, transactionItems, transactions, user } from '@/db/schema';
 import type { Viewer } from '@/lib/auth/viewer';
@@ -270,6 +270,37 @@ function toRow(viewer: Viewer, r: RawRow): TransactionRow {
     hasReceipt: Boolean(r.hasReceipt),
     canEdit: canEditRow(viewer, r.createdById),
   };
+}
+
+export type TransactionExtras = { receiptNumber: string | null; note: string | null; items: ItemInput[] };
+
+/**
+ * Receipt number, note and items for transactions the caller already listed (listTransactions
+ * applied the viewer's rights), in one pass instead of one read per row. Items keep their order.
+ */
+export async function extrasFor(transactionIds: string[]): Promise<Map<string, TransactionExtras>> {
+  const extras = new Map<string, TransactionExtras>();
+  if (transactionIds.length === 0) return extras;
+  const rows = db
+    .select({ id: transactions.id, receiptNumber: transactions.receiptNumber, note: transactions.note })
+    .from(transactions)
+    .where(inArray(transactions.id, transactionIds))
+    .all();
+  for (const row of rows) extras.set(row.id, { receiptNumber: row.receiptNumber, note: row.note, items: [] });
+  const items = db
+    .select({
+      transactionId: transactionItems.transactionId,
+      name: transactionItems.name,
+      quantity: transactionItems.quantity,
+      unitPriceSen: transactionItems.unitPriceSen,
+      lineTotalSen: transactionItems.lineTotalSen,
+    })
+    .from(transactionItems)
+    .where(inArray(transactionItems.transactionId, transactionIds))
+    .orderBy(asc(transactionItems.transactionId), asc(transactionItems.position))
+    .all();
+  for (const { transactionId, ...item } of items) extras.get(transactionId)?.items.push(item);
+  return extras;
 }
 
 /** `null` when it does not exist or the viewer may not see it: the two look the same on purpose. */
