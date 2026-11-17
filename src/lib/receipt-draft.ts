@@ -2,6 +2,9 @@
 // database import, so the scan page can use the type too. Nothing here throws: a value that cannot
 // be right is left out and a warning tells the person to fill it in.
 
+import { fmt } from '@/i18n/format';
+import type { Locale } from '@/i18n/locale';
+import { messages } from '@/i18n/messages';
 import { formatRM, parseRM } from './money';
 import { readWhen } from './transaction-form-data';
 import { PAYMENT_METHODS, type ItemInput, type PaymentMethod, type TransactionInput } from './transaction-types';
@@ -56,10 +59,12 @@ function readItems(value: unknown): { items: ItemInput[]; dropped: number } {
   return { items, dropped };
 }
 
-export function toDraft(raw: unknown, budgets: { id: string; name: string }[]): ReceiptDraft {
+/** The warnings are written in `locale`, the language of the person scanning. */
+export function toDraft(raw: unknown, budgets: { id: string; name: string }[], locale: Locale = 'en'): ReceiptDraft {
   const r = fields(raw);
   const initial: Partial<TransactionInput> = {};
   const warnings: string[] = [];
+  const wording = messages[locale].scan.warnings;
 
   const merchant = text(r.merchant, MERCHANT_MAX);
   if (merchant) initial.merchant = merchant;
@@ -67,25 +72,25 @@ export function toDraft(raw: unknown, budgets: { id: string; name: string }[]): 
   if (receiptNumber) initial.receiptNumber = receiptNumber;
 
   if (absent(r.date)) {
-    warnings.push('No date was found on the receipt.');
+    warnings.push(wording.noDate);
   } else {
     const date = typeof r.date === 'string' ? r.date.trim() : '';
     const time = typeof r.time === 'string' ? r.time.trim() : '';
     const exact = time ? readWhen(date, time) : null;
     const when = exact ?? readWhen(date, NOON);
-    if (!when) warnings.push('The date on the receipt could not be read.');
+    if (!when) warnings.push(wording.badDate);
     else {
       initial.occurredAt = when;
-      if (time && !exact) warnings.push('The time on the receipt could not be read, so it is set to 12:00.');
+      if (time && !exact) warnings.push(wording.badTime);
     }
   }
 
   if (absent(r.total)) {
-    warnings.push('No total was found on the receipt.');
+    warnings.push(wording.noTotal);
   } else {
     const total = sen(r.total);
     if (total !== null && total > 0) initial.totalSen = total;
-    else warnings.push('The total on the receipt could not be read.');
+    else warnings.push(wording.badTotal);
   }
 
   if (PAYMENT_METHODS.includes(r.paymentMethod as PaymentMethod)) initial.paymentMethod = r.paymentMethod as PaymentMethod;
@@ -96,12 +101,12 @@ export function toDraft(raw: unknown, budgets: { id: string; name: string }[]): 
 
   const { items, dropped } = readItems(r.items);
   initial.items = items;
-  if (dropped === 1) warnings.push('1 item could not be read and was left out.');
-  if (dropped > 1) warnings.push(`${dropped} items could not be read and were left out.`);
+  if (dropped === 1) warnings.push(wording.oneItemDropped);
+  if (dropped > 1) warnings.push(fmt(wording.itemsDropped, { count: dropped }));
   if (items.length > 0 && initial.totalSen !== undefined) {
     const sum = items.reduce((total, item) => total + item.lineTotalSen, 0);
     if (sum !== initial.totalSen) {
-      warnings.push(`The items add up to ${formatRM(sum)} but the total reads ${formatRM(initial.totalSen)}.`);
+      warnings.push(fmt(wording.itemsMismatch, { sum: formatRM(sum), total: formatRM(initial.totalSen) }));
     }
   }
 

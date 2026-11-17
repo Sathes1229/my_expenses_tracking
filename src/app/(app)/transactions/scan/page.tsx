@@ -1,22 +1,26 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { PageHeader } from '@/components/page-header';
+import { getMessages } from '@/i18n/server';
 import { requireViewer } from '@/lib/auth/viewer';
 import { listBudgetNames } from '@/lib/budgets';
 import { ReceiptScanner } from './receipt-scanner';
 
-export const metadata: Metadata = { title: 'Scan a receipt | My Expenses' };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getMessages()).scan.pageTitle };
+}
 
 export const instant = false;
 
-export default function ScanReceiptPage() {
+export default async function ScanReceiptPage() {
+  const m = await getMessages();
   return (
     <>
-      <PageHeader title="Scan a receipt" />
+      <PageHeader title={m.scan.title} />
       <Suspense
         fallback={
           <p role="status" className="mt-6 text-muted">
-            Loading…
+            {m.common.loading}
           </p>
         }
       >

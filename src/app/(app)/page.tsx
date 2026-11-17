@@ -259,7 +259,7 @@ function Recent({ data, isGuest, t, locale }: { data: Dashboard; isGuest: boolea
       ) : (
         <>
           <div className="mt-3">
-            <TransactionList rows={data.recent} />
+            <TransactionList rows={data.recent} locale={locale} />
           </div>
           <Link href={`/transactions?month=${data.month}`} className={cx(standaloneLink, 'mt-1')}>
             {fmt(t.allTransactionsIn, values)}

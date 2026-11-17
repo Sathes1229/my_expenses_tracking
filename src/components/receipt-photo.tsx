@@ -1,10 +1,23 @@
 import type { ReactNode } from 'react';
+import type { Locale } from '@/i18n/locale';
+import { messages } from '@/i18n/messages';
 
 /**
  * A receipt photo in a frame of fixed size, so nothing moves while it loads: 288px tall on phones,
  * 3:4 (the shape of most receipt photos) from lg up. The whole photo always shows, letterboxed.
+ * `locale` words the link to the full-size photo; the page passes its own.
  */
-export function ReceiptPhoto({ src, alt, fullSizeLink = true }: { src: string; alt: string; fullSizeLink?: boolean }) {
+export function ReceiptPhoto({
+  src,
+  alt,
+  locale,
+  fullSizeLink = true,
+}: {
+  src: string;
+  alt: string;
+  locale: Locale;
+  fullSizeLink?: boolean;
+}) {
   return (
     <figure className="flex flex-col gap-1">
       <div className="h-72 overflow-hidden rounded-surface border border-line bg-sunken lg:aspect-[3/4] lg:h-auto">
@@ -14,7 +27,7 @@ export function ReceiptPhoto({ src, alt, fullSizeLink = true }: { src: string; a
       </div>
       {fullSizeLink && (
         <a href={src} target="_blank" rel="noopener" className="inline-flex min-h-11 items-center self-start">
-          Open the photo in a new tab
+          {messages[locale].transactions.openPhoto}
         </a>
       )}
     </figure>

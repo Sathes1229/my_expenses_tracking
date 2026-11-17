@@ -7,12 +7,15 @@ import { cx } from '@/components/cx';
 import { CameraIcon } from '@/components/icons';
 import { BesidePhoto, ReceiptPhoto } from '@/components/receipt-photo';
 import { TransactionForm } from '@/components/transaction-form';
+import { useLocale, useMessages } from '@/i18n/client';
+import { fmt } from '@/i18n/format';
+import { fmtNodes } from '@/i18n/format-nodes';
+import type { Messages } from '@/i18n/messages';
 import type { ReceiptDraft } from '@/lib/receipt-draft';
 import type { TransactionInput } from '@/lib/transaction-types';
 import { createTransactionAction } from '../actions';
 
 const ACCEPT = 'image/jpeg,image/png,image/webp';
-const NOT_SENT = 'The photo could not be sent. Check the connection and try again.';
 
 type Reason = 'not_configured' | 'unreadable' | 'provider_error';
 
@@ -35,9 +38,10 @@ function startingValues(answer: Answer): Partial<TransactionInput> {
   return occurredAt ? { ...rest, occurredAt: new Date(occurredAt) } : rest;
 }
 
-function errorText(answer: unknown): string {
+/** The route's own message (already in the viewer's language), or `fallback` when there is none. */
+function errorText(answer: unknown, fallback: string): string {
   if (typeof answer === 'object' && answer !== null && 'error' in answer && typeof answer.error === 'string') return answer.error;
-  return NOT_SENT;
+  return fallback;
 }
 
 /**
@@ -46,6 +50,9 @@ function errorText(answer: unknown): string {
  */
 export function ReceiptScanner({ budgets, isOwner }: { budgets: { id: string; name: string }[]; isOwner: boolean }) {
   const [phase, setPhase] = useState<Phase>({ step: 'pick' });
+  const m = useMessages();
+  const locale = useLocale();
+  const t = m.scan;
   const statusRef = useRef<HTMLDivElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const chooseRef = useRef<HTMLInputElement>(null);
@@ -70,7 +77,7 @@ export function ReceiptScanner({ budgets, isOwner }: { budgets: { id: string; na
       const res = await fetch('/api/receipts', { method: 'POST', body });
       const answer: unknown = await res.json().catch(() => null);
       if (!res.ok) {
-        setPhase({ step: 'pick', error: errorText(answer), signedOut: res.status === 401 });
+        setPhase({ step: 'pick', error: errorText(answer, t.notSent), signedOut: res.status === 401 });
         return;
       }
       const a = answer as Answer;
@@ -83,7 +90,7 @@ export function ReceiptScanner({ budgets, isOwner }: { budgets: { id: string; na
         reason: a.draft ? undefined : a.reason,
       });
     } catch {
-      setPhase({ step: 'pick', error: NOT_SENT });
+      setPhase({ step: 'pick', error: t.notSent });
     }
   }
 
@@ -91,15 +98,12 @@ export function ReceiptScanner({ budgets, isOwner }: { budgets: { id: string; na
     <div className="mt-6">
       {/* One live region for the whole flow, so "Reading" and the outcome are both announced. Takes no room while empty. */}
       <div ref={statusRef} tabIndex={-1} role="status" className="mb-6 w-fit max-w-xl empty:mb-0">
-        <Status phase={phase} isOwner={isOwner} />
+        <Status phase={phase} isOwner={isOwner} t={t} />
       </div>
 
       {phase.step === 'pick' && (
         <div className="flex max-w-xl flex-col gap-4">
-          <p className="text-ink">
-            Photograph the whole receipt, flat and in good light. What can be read from it fills in the form for you to
-            check. Nothing is saved until you press Save transaction.
-          </p>
+          <p className="text-ink">{t.intro}</p>
           {phase.error && (
             <p
               ref={errorRef}
@@ -111,26 +115,26 @@ export function ReceiptScanner({ budgets, isOwner }: { budgets: { id: string; na
               {phase.signedOut && (
                 <>
                   {' '}
-                  <Link href="/login">Sign in</Link>
+                  <Link href="/login">{m.common.signIn}</Link>
                 </>
               )}
             </p>
           )}
           <div className="flex flex-wrap gap-3">
             {/* Opens the camera straight away, so it is only offered where there is one: phones and tablets. */}
-            <PhotoPicker label="Take a photo" camera onPick={read} className="hidden pointer-coarse:flex" />
-            <PhotoPicker label="Choose a photo" onPick={read} inputRef={chooseRef} />
+            <PhotoPicker label={t.takePhoto} camera onPick={read} className="hidden pointer-coarse:flex" />
+            <PhotoPicker label={t.choosePhoto} onPick={read} inputRef={chooseRef} />
           </div>
-          <p className="text-sm text-muted">JPEG, PNG or WebP, up to 15 MB. Reading starts as soon as you pick one.</p>
+          <p className="text-sm text-muted">{t.formats}</p>
           <Link href="/transactions/new" className="inline-flex min-h-11 w-fit items-center">
-            Type it in without a photo
+            {t.typeItIn}
           </Link>
         </div>
       )}
 
       {phase.step === 'reading' && (
         <div className="w-full max-w-xs">
-          <ReceiptPhoto src={phase.preview} alt="The receipt photo being read" fullSizeLink={false} />
+          <ReceiptPhoto src={phase.preview} alt={t.photoBeingRead} locale={locale} fullSizeLink={false} />
         </div>
       )}
 
@@ -140,11 +144,16 @@ export function ReceiptScanner({ budgets, isOwner }: { budgets: { id: string; na
             <>
               <ReceiptPhoto
                 src={phase.preview}
-                alt={phase.initial.merchant ? `Receipt from ${phase.initial.merchant}` : 'The receipt photo you chose'}
+                alt={
+                  phase.initial.merchant
+                    ? fmt(m.transactions.receiptFrom, { merchant: phase.initial.merchant })
+                    : t.photoYouChose
+                }
+                locale={locale}
               />
               <div>
                 <Button variant="secondary" onClick={() => setPhase({ step: 'pick', again: true })}>
-                  Use a different photo
+                  {t.differentPhoto}
                 </Button>
               </div>
             </>
@@ -157,7 +166,7 @@ export function ReceiptScanner({ budgets, isOwner }: { budgets: { id: string; na
             initial={phase.initial}
             warnings={phase.warnings}
             hidden={{ receiptUploadId: phase.uploadId }}
-            submitLabel="Save transaction"
+            submitLabel={m.transactions.save}
             cancelHref="/transactions"
           />
         </BesidePhoto>
@@ -166,7 +175,7 @@ export function ReceiptScanner({ budgets, isOwner }: { budgets: { id: string; na
   );
 }
 
-function Status({ phase, isOwner }: { phase: Phase; isOwner: boolean }) {
+function Status({ phase, isOwner, t }: { phase: Phase; isOwner: boolean; t: Messages['scan'] }) {
   if (phase.step === 'reading') {
     return (
       <div>
@@ -175,28 +184,23 @@ function Status({ phase, isOwner }: { phase: Phase; isOwner: boolean }) {
             aria-hidden="true"
             className="size-4 shrink-0 rounded-full border-2 border-current border-r-transparent motion-safe:animate-spin"
           />
-          Reading your receipt…
+          {t.reading}
         </p>
-        <p className="mt-1 text-muted">This can take up to a minute.</p>
+        <p className="mt-1 text-muted">{t.readingTime}</p>
       </div>
     );
   }
   if (phase.step !== 'review') return null;
-  if (!phase.reason) return <p className="text-ink">Filled in from the photo. Check each field against the receipt, then save.</p>;
+  if (!phase.reason) return <p className="text-ink">{t.filledIn}</p>;
   let why: ReactNode;
   if (phase.reason === 'not_configured') {
-    why = isOwner ? (
-      <>
-        Receipt reading is not set up yet, so type the details in below, or choose a receipt model in{' '}
-        <Link href="/settings/ai">AI settings</Link>.
-      </>
-    ) : (
-      'Receipt reading is not set up yet, so type the details in below.'
-    );
+    why = isOwner
+      ? fmtNodes(t.notSetUpOwner, { link: <Link href="/settings/ai">{t.aiSettings}</Link> })
+      : t.notSetUp;
   } else if (phase.reason === 'unreadable') {
-    why = 'The photo could not be read as a receipt, so type the details in below.';
+    why = t.unreadable;
   } else {
-    why = 'The AI service did not answer, so type the details in below.';
+    why = t.providerError;
   }
   return <p className="rounded-control border border-line-strong bg-surface px-3 py-3 text-ink">{why}</p>;
 }

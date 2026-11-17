@@ -8,11 +8,13 @@ import { FormAlert } from '@/components/form-alert';
 import { Select } from '@/components/select';
 import { SubmitButton } from '@/components/submit-button';
 import { useFocusFirstInvalid } from '@/components/use-focus-first-invalid';
+import { useMessages } from '@/i18n/client';
+import { fmt } from '@/i18n/format';
 import { initialFormState, type FormState } from '@/lib/form-state';
 import { formatRM, parseRM } from '@/lib/money';
 import { ITEM_FIELDS } from '@/lib/transaction-form-data';
 import { dayKey, timeKey } from '@/lib/time';
-import { PAYMENT_LABELS, PAYMENT_METHODS, UNCATEGORISED, type TransactionInput } from '@/lib/transaction-types';
+import { PAYMENT_METHODS, type TransactionInput } from '@/lib/transaction-types';
 
 type Props = {
   /** The server action this form submits to. It checks who is acting itself. */
@@ -57,6 +59,8 @@ function itemsSum(rows: Row[]): number | null {
 
 export function TransactionForm({ action, budgets, initial, warnings, submitLabel, cancelHref, hidden }: Props) {
   const [state, formAction] = useActionState(action, initialFormState);
+  const { common, transactions } = useMessages();
+  const t = transactions.form;
   const formRef = useFocusFirstInvalid(state);
   const errors = state.fieldErrors;
   const noteId = useId();
@@ -82,10 +86,10 @@ export function TransactionForm({ action, budgets, initial, warnings, submitLabe
   const sum = itemsSum(rows);
   let note: string | null = null;
   if (rows.length > 0 && sum !== null && totalSen !== null && sum !== totalSen) {
-    note =
-      sum < totalSen
-        ? `The items add up to ${formatRM(sum)}, which is ${formatRM(totalSen - sum)} less than the total. You can still save.`
-        : `The items add up to ${formatRM(sum)}, which is ${formatRM(sum - totalSen)} more than the total. You can still save.`;
+    note = fmt(sum < totalSen ? t.itemsLess : t.itemsMore, {
+      sum: formatRM(sum),
+      difference: formatRM(Math.abs(totalSen - sum)),
+    });
   }
 
   return (
@@ -93,7 +97,7 @@ export function TransactionForm({ action, budgets, initial, warnings, submitLabe
       <FormAlert state={state} />
       {warnings && warnings.length > 0 && (
         <div className="rounded-control border border-line-strong bg-surface px-3 py-3">
-          <p className="font-semibold text-ink">Check these before saving</p>
+          <p className="font-semibold text-ink">{t.checkFirst}</p>
           <ul className="mt-1 list-disc pl-5 text-muted">
             {warnings.map((warning) => (
               <li key={warning}>{warning}</li>
@@ -103,9 +107,9 @@ export function TransactionForm({ action, budgets, initial, warnings, submitLabe
       )}
       {hidden && Object.entries(hidden).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
 
-      <Field label="Merchant" name="merchant" defaultValue={v('merchant', initial?.merchant ?? '')} error={errors?.merchant} maxLength={100} autoComplete="off" />
+      <Field label={t.merchant} name="merchant" defaultValue={v('merchant', initial?.merchant ?? '')} error={errors?.merchant} maxLength={100} autoComplete="off" />
       <Field
-        label="Total (RM)"
+        label={t.total}
         name="total"
         inputMode="decimal"
         autoComplete="off"
@@ -115,52 +119,52 @@ export function TransactionForm({ action, budgets, initial, warnings, submitLabe
       />
       <div className="grid grid-cols-1 gap-5 min-[420px]:grid-cols-2">
         <Field
-          label="Date"
+          label={t.date}
           name="date"
           type="date"
           defaultValue={v('date', initial?.occurredAt ? dayKey(initial.occurredAt) : '')}
           error={errors?.occurredAt}
-          hint="Malaysia time."
+          hint={t.dateHint}
         />
-        <Field label="Time" name="time" type="time" defaultValue={v('time', initial?.occurredAt ? timeKey(initial.occurredAt) : '')} />
+        <Field label={t.time} name="time" type="time" defaultValue={v('time', initial?.occurredAt ? timeKey(initial.occurredAt) : '')} />
       </div>
-      <Select label="Paid with" name="paymentMethod" defaultValue={v('paymentMethod', initial?.paymentMethod ?? 'qr')} error={errors?.paymentMethod}>
+      <Select label={transactions.paidWith} name="paymentMethod" defaultValue={v('paymentMethod', initial?.paymentMethod ?? 'qr')} error={errors?.paymentMethod}>
         {PAYMENT_METHODS.map((method) => (
           <option key={method} value={method}>
-            {PAYMENT_LABELS[method]}
+            {common.payment[method]}
           </option>
         ))}
       </Select>
-      <Select label="Budget" name="budgetId" defaultValue={v('budgetId', initial?.budgetId ?? '')} error={errors?.budget}>
-        <option value="">{UNCATEGORISED}</option>
+      <Select label={transactions.budget} name="budgetId" defaultValue={v('budgetId', initial?.budgetId ?? '')} error={errors?.budget}>
+        <option value="">{common.uncategorised}</option>
         {budgets.map((budget) => (
           <option key={budget.id} value={budget.id}>
             {budget.name}
           </option>
         ))}
       </Select>
-      <Field label="Receipt number (optional)" name="receiptNumber" defaultValue={v('receiptNumber', initial?.receiptNumber ?? '')} error={errors?.receiptNumber} maxLength={60} autoComplete="off" />
-      <FieldShell id={noteId} label="Note (optional)" error={errors?.note}>
+      <Field label={t.receiptNumber} name="receiptNumber" defaultValue={v('receiptNumber', initial?.receiptNumber ?? '')} error={errors?.receiptNumber} maxLength={60} autoComplete="off" />
+      <FieldShell id={noteId} label={t.note} error={errors?.note}>
         <textarea {...textarea(noteId, errors?.note)} name="note" rows={3} maxLength={500} defaultValue={v('note', initial?.note ?? '')} />
       </FieldShell>
 
       <section aria-labelledby="items-heading" className="flex flex-col gap-4">
         <h2 id="items-heading" className="text-lg font-semibold text-ink">
-          Items (optional)
+          {t.items}
         </h2>
-        {errors?.items && <p className="text-sm font-medium text-danger"><span className="sr-only">Error: </span>{errors.items}</p>}
-        {rows.length === 0 && <p className="text-muted">Add the lines on the receipt if you want them kept with the total.</p>}
+        {errors?.items && <p className="text-sm font-medium text-danger"><span className="sr-only">{common.errorPrefix} </span>{errors.items}</p>}
+        {rows.length === 0 && <p className="text-muted">{t.noItems}</p>}
         {rows.map((row, i) => (
           <fieldset key={row.key} className="flex flex-col gap-4 rounded-surface border border-line p-4">
-            <legend className="px-1 text-sm font-semibold text-ink">Item {i + 1}</legend>
-            <Field label="Item name" name={ITEM_FIELDS.name} value={row.name} onChange={(e) => change(row.key, { name: e.target.value })} error={errors?.[`items.${i}.name`]} maxLength={100} autoComplete="off" />
+            <legend className="px-1 text-sm font-semibold text-ink">{fmt(t.item, { n: i + 1 })}</legend>
+            <Field label={t.itemName} name={ITEM_FIELDS.name} value={row.name} onChange={(e) => change(row.key, { name: e.target.value })} error={errors?.[`items.${i}.name`]} maxLength={100} autoComplete="off" />
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Quantity" name={ITEM_FIELDS.quantity} inputMode="decimal" value={row.quantity} onChange={(e) => change(row.key, { quantity: e.target.value })} error={errors?.[`items.${i}.quantity`]} autoComplete="off" />
-              <Field label="Price each (RM)" name={ITEM_FIELDS.unit} inputMode="decimal" value={row.unit} onChange={(e) => change(row.key, { unit: e.target.value })} error={errors?.[`items.${i}.unitPrice`]} autoComplete="off" />
+              <Field label={t.quantity} name={ITEM_FIELDS.quantity} inputMode="decimal" value={row.quantity} onChange={(e) => change(row.key, { quantity: e.target.value })} error={errors?.[`items.${i}.quantity`]} autoComplete="off" />
+              <Field label={t.unitPrice} name={ITEM_FIELDS.unit} inputMode="decimal" value={row.unit} onChange={(e) => change(row.key, { unit: e.target.value })} error={errors?.[`items.${i}.unitPrice`]} autoComplete="off" />
             </div>
             <Field
-              label="Line total (RM)"
-              hint="Leave empty to use quantity times price."
+              label={t.lineTotal}
+              hint={t.lineTotalHint}
               name={ITEM_FIELDS.total}
               inputMode="decimal"
               value={row.total}
@@ -170,7 +174,7 @@ export function TransactionForm({ action, budgets, initial, warnings, submitLabe
             />
             <div>
               <Button variant="quiet" className="-ml-3" onClick={() => setRows((all) => all.filter((r) => r.key !== row.key))}>
-                Remove item {i + 1}
+                {fmt(t.removeItem, { n: i + 1 })}
               </Button>
             </div>
           </fieldset>
@@ -183,7 +187,7 @@ export function TransactionForm({ action, budgets, initial, warnings, submitLabe
               setNextKey(nextKey + 1);
             }}
           >
-            Add an item
+            {t.addItem}
           </Button>
         </div>
         <p role="status" className="text-sm text-muted empty:hidden">
@@ -194,7 +198,7 @@ export function TransactionForm({ action, budgets, initial, warnings, submitLabe
       <div className="flex flex-wrap gap-3">
         <SubmitButton>{submitLabel}</SubmitButton>
         <ButtonLink href={cancelHref} variant="secondary">
-          Cancel
+          {common.cancel}
         </ButtonLink>
       </div>
     </form>

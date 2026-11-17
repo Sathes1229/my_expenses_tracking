@@ -1,5 +1,6 @@
 import { generateText, NoObjectGeneratedError, Output } from 'ai';
 import { z } from 'zod';
+import type { Locale } from '@/i18n/locale';
 import { toDraft, type ReceiptDraft } from '@/lib/receipt-draft';
 import { describeProviderError, languageModel } from './providers';
 import { getAiSettings } from './settings';
@@ -60,7 +61,11 @@ function instructions(budgetNames: string[]): string {
  * a model problem: the scan page then opens the form empty with the photo attached. No usage row is
  * written: receipt reading is never capped or counted against the daily AI budget.
  */
-export async function extractReceipt(image: Buffer, budgets: { id: string; name: string }[]): Promise<ReadResult> {
+export async function extractReceipt(
+  image: Buffer,
+  budgets: { id: string; name: string }[],
+  locale: Locale = 'en',
+): Promise<ReadResult> {
   const { receiptModel } = await getAiSettings();
   if (!receiptModel) return { ok: false, reason: 'not_configured' };
   const budgetNames = [...new Set(budgets.map((b) => b.name))];
@@ -92,5 +97,5 @@ export async function extractReceipt(image: Buffer, budgets: { id: string; name:
   }
 
   if (output.isReceipt === false) return { ok: false, reason: 'unreadable' };
-  return { ok: true, draft: toDraft(output, budgets) };
+  return { ok: true, draft: toDraft(output, budgets, locale) };
 }

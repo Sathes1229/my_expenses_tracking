@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useMessages } from '@/i18n/client';
 import { CloseIcon } from './icons';
 
 type DialogProps = {
@@ -19,6 +20,7 @@ type DialogProps = {
 export function Dialog({ open, onClose, title, children }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const { common } = useMessages();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -53,7 +55,7 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
         </h2>
         <button
           type="button"
-          aria-label="Close"
+          aria-label={common.close}
           onClick={() => ref.current?.close()}
           className="-mt-1 -mr-2 inline-flex size-11 shrink-0 items-center justify-center rounded-control text-muted transition-state hover:bg-sunken hover:text-ink"
         >

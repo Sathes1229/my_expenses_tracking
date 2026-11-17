@@ -132,6 +132,32 @@ describe('toDraft', () => {
     expect(d.warnings).toEqual([]);
     expect(d.initial).toMatchObject({ merchant: 'KK Super Mart', receiptNumber: 'INV-0042', totalSen: 1250, paymentMethod: 'card', budgetId: 'b1' });
   });
+
+  it("writes its warnings in the viewer's language", () => {
+    expect(toDraft({}, [], 'ms').warnings).toEqual(['Tiada tarikh ditemui pada resit.', 'Tiada jumlah ditemui pada resit.']);
+    const d = toDraft(
+      {
+        date: '2026-11-03',
+        time: '25:61',
+        total: 12.5,
+        items: [
+          { name: 'Milk', quantity: 2, unitPrice: 3.2, lineTotal: 6.4 },
+          { name: 'Bad', quantity: -1, unitPrice: 1, lineTotal: 1 },
+          { name: 'Worse', quantity: 0, unitPrice: 1, lineTotal: 1 },
+        ],
+      },
+      [],
+      'ms',
+    );
+    expect(d.warnings).toEqual([
+      'Masa pada resit tidak dapat dibaca, jadi ia ditetapkan kepada 12:00.',
+      '2 item tidak dapat dibaca dan telah ditinggalkan.',
+      'Jumlah item ialah RM 6.40 tetapi jumlah pada resit ialah RM 12.50.',
+    ]);
+    expect(toDraft({ items: [{ name: 'Bad', quantity: -1, unitPrice: 1, lineTotal: 1 }] }, [], 'en').warnings).toContain(
+      '1 item could not be read and was left out.',
+    );
+  });
 });
 
 describe('extractReceipt', () => {
@@ -174,6 +200,13 @@ describe('extractReceipt', () => {
     const parts = Array.isArray(user?.content) ? user.content : [];
     expect(parts.some((p) => p.type === 'file' && p.mediaType === 'image/jpeg')).toBe(true);
     expect(db.select().from(aiUsage).all()).toHaveLength(0); // receipts never count against the AI budget
+  });
+
+  it("writes the draft's warnings in the language it is asked for", async () => {
+    await configure();
+    vi.mocked(languageModel).mockReturnValue(answering({ ...fullReceipt, date: null, suggestedBudget: null }));
+    const result = await extractReceipt(img, [], 'ms');
+    expect(result.ok && result.draft.warnings).toEqual(['Tiada tarikh ditemui pada resit.']);
   });
 
   it('reports unreadable when the model says it is not a receipt, or answers out of shape', async () => {

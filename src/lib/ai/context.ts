@@ -3,12 +3,20 @@ import { listBudgetNames, listBudgetSummaries, type BudgetSummary } from '@/lib/
 import { debtTotals } from '@/lib/debts';
 import { formatRM } from '@/lib/money';
 import { dayKey, monthKey, monthLabel, shiftMonth } from '@/lib/time';
-import { listTransactions, PAYMENT_LABELS, type TransactionRow } from '@/lib/transactions';
+import { listTransactions, type PaymentMethod, type TransactionRow } from '@/lib/transactions';
 
 const MONTHS = 3;
 const TOP_MERCHANTS = 5;
 // A guest's own transactions are listed one by one; past this many only the count is given.
 const GUEST_ROWS = 40;
+
+// The prompt is English whatever the viewer's language, so these stay out of the catalogs.
+const PAYMENT_LABELS: Record<PaymentMethod, string> = {
+  qr: 'QR',
+  cash: 'Cash',
+  card: 'Card',
+  other: 'Other',
+};
 
 const STATE_WORDS: Record<BudgetSummary['state'], string> = {
   fine: 'on track',

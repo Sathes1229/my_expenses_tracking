@@ -51,6 +51,6 @@ export async function POST(request: Request): Promise<Response> {
   // The stored copy goes to the AI: smaller than the original, and without its EXIF.
   const stored = await readReceiptImage(viewer, uploadId);
   if (!stored) throw new Error(say('en', 'receiptReadBack'));
-  const result = await extractReceipt(stored, await listBudgetNames(viewer));
+  const result = await extractReceipt(stored, await listBudgetNames(viewer), locale);
   return Response.json(result.ok ? { uploadId, draft: result.draft } : { uploadId, draft: null, reason: result.reason });
 }

@@ -22,19 +22,6 @@ const PENDING: string[] = [
   'src/app/(app)/settings/page.tsx',
   'src/app/(app)/settings/people-list.tsx',
   'src/app/(app)/settings/profile/profile-forms.tsx',
-  'src/app/(app)/transactions/[id]/not-found.tsx',
-  'src/app/(app)/transactions/[id]/page.tsx',
-  'src/app/(app)/transactions/delete-transaction.tsx',
-  'src/app/(app)/transactions/error.tsx',
-  'src/app/(app)/transactions/new/page.tsx',
-  'src/app/(app)/transactions/page.tsx',
-  'src/app/(app)/transactions/scan/page.tsx',
-  'src/app/(app)/transactions/scan/receipt-scanner.tsx',
-  'src/app/(app)/transactions/transaction-list.tsx',
-  'src/components/copy-field.tsx',
-  'src/components/dialog.tsx',
-  'src/components/receipt-photo.tsx',
-  'src/components/transaction-form.tsx',
 ];
 
 /** Text that is the same in both languages. */
@@ -65,7 +52,8 @@ const hasWords = (text: string) => /[A-Za-z]{2,}/.test(text) && !ALLOWED.has(tex
 
 /** JSX text between tags, copy-carrying attributes, and label/title/message properties. */
 const PATTERNS: RegExp[] = [
-  />([^<>{}]*[A-Za-z][^<>{}]*)</g,
+  // Not after "=": the arrow in a type such as `(prev: FormState) => Promise<FormState>` is not a tag.
+  /(?<!=)>([^<>{}]*[A-Za-z][^<>{}]*)</g,
   /\b(?:aria-label|title|placeholder|alt|label|hint|description)="([^"]*)"/g,
   /\b(?:label|title|message|text):\s*'([^']*)'/g,
 ];

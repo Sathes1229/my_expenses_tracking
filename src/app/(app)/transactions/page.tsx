@@ -8,15 +8,19 @@ import { CameraIcon } from '@/components/icons';
 import { Money } from '@/components/money';
 import { PageHeader } from '@/components/page-header';
 import { Select } from '@/components/select';
-import { getMessages } from '@/i18n/server';
+import { fmt } from '@/i18n/format';
+import { fmtNodes } from '@/i18n/format-nodes';
+import { getLocale, getMessages } from '@/i18n/server';
 import { requireViewer } from '@/lib/auth/viewer';
 import { listBudgetNames } from '@/lib/budgets';
 import { latestMonth, monthLabel, shiftMonth } from '@/lib/time';
 import { filterFromQuery, UNCATEGORISED_CHOICE, type FilterChoices } from '@/lib/transaction-filter';
-import { listPeople, listTransactions, PAYMENT_LABELS, PAYMENT_METHODS, UNCATEGORISED } from '@/lib/transactions';
+import { listPeople, listTransactions, PAYMENT_METHODS } from '@/lib/transactions';
 import { TransactionList } from './transaction-list';
 
-export const metadata: Metadata = { title: 'Transactions | My Expenses' };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getMessages()).transactions.pageTitle };
+}
 
 // Blocks on the session read, like the (app) layout.
 export const instant = false;
@@ -32,15 +36,16 @@ function href(month: string, choices: FilterChoices, path = '/transactions'): st
   return `${path}?${query}`;
 }
 
-export default function TransactionsPage({ searchParams }: PageProps<'/transactions'>) {
+export default async function TransactionsPage({ searchParams }: PageProps<'/transactions'>) {
+  const t = (await getMessages()).transactions;
   return (
     <div className="max-w-3xl">
       <Suspense
         fallback={
           <>
-            <PageHeader title="Transactions" />
+            <PageHeader title={t.title} />
             <p role="status" className="mt-6 text-muted">
-              Loading transactions…
+              {t.loading}
             </p>
           </>
         }
@@ -59,48 +64,52 @@ async function Transactions({ searchParams }: Pick<PageProps<'/transactions'>, '
   const latest = latestMonth();
   const isGuest = viewer.role === 'guest';
 
-  const [rows, budgets, people] = await Promise.all([
+  const [locale, m, rows, budgets, people] = await Promise.all([
+    getLocale(),
+    getMessages(),
     listTransactions(viewer, filter),
     listBudgetNames(viewer),
     listPeople(viewer),
   ]);
+  const t = m.transactions;
+  const values = { month: monthLabel(month, locale) };
   const filtered = Boolean(choices.budget || choices.person || choices.method);
   const shownSen = rows.reduce((sum, row) => sum + row.totalSen, 0);
   const addButtons = (
     <>
       <ButtonLink href="/transactions/scan" className="gap-2">
         <CameraIcon />
-        Scan receipt
+        {m.home.scanReceipt}
       </ButtonLink>
       <ButtonLink href="/transactions/new" variant="secondary">
-        Add manually
+        {m.home.addManually}
       </ButtonLink>
     </>
   );
 
   return (
     <>
-      <PageHeader title="Transactions" action={rows.length > 0 ? addButtons : undefined} />
+      <PageHeader title={t.title} action={rows.length > 0 ? addButtons : undefined} />
 
-      <nav aria-label="Month" className="mt-4 flex flex-wrap items-center gap-2">
+      <nav aria-label={m.common.month} className="mt-4 flex flex-wrap items-center gap-2">
         <p className="w-full text-lg font-semibold text-ink">
-          {monthLabel(month)}
+          {values.month}
         </p>
         <ButtonLink variant="secondary" href={href(shiftMonth(month, -1), choices)}>
-          Previous month
+          {m.common.previousMonth}
         </ButtonLink>
         {month < latest && (
           <ButtonLink variant="secondary" href={href(shiftMonth(month, 1), choices)}>
-            Next month
+            {m.common.nextMonth}
           </ButtonLink>
         )}
       </nav>
 
       <form method="get" action="/transactions" className="mt-5 flex flex-col gap-4 min-[560px]:flex-row min-[560px]:flex-wrap min-[560px]:items-end">
         <input type="hidden" name="month" value={month} />
-        <Select label="Budget" name="budget" defaultValue={choices.budget} className="min-[560px]:w-48">
-          <option value="">All budgets</option>
-          <option value={NONE}>{UNCATEGORISED}</option>
+        <Select label={t.budget} name="budget" defaultValue={choices.budget} className="min-[560px]:w-48">
+          <option value="">{t.allBudgets}</option>
+          <option value={NONE}>{m.common.uncategorised}</option>
           {budgets.map((budget) => (
             <option key={budget.id} value={budget.id}>
               {budget.name}
@@ -108,8 +117,8 @@ async function Transactions({ searchParams }: Pick<PageProps<'/transactions'>, '
           ))}
         </Select>
         {!isGuest && (
-          <Select label="Person" name="person" defaultValue={choices.person} className="min-[560px]:w-44">
-            <option value="">Everyone</option>
+          <Select label={t.person} name="person" defaultValue={choices.person} className="min-[560px]:w-44">
+            <option value="">{t.everyone}</option>
             {people.map((person) => (
               <option key={person.id} value={person.id}>
                 {person.name}
@@ -117,24 +126,24 @@ async function Transactions({ searchParams }: Pick<PageProps<'/transactions'>, '
             ))}
           </Select>
         )}
-        <Select label="Paid with" name="method" defaultValue={choices.method} className="min-[560px]:w-40">
-          <option value="">Any</option>
-          {PAYMENT_METHODS.map((m) => (
-            <option key={m} value={m}>
-              {PAYMENT_LABELS[m]}
+        <Select label={t.paidWith} name="method" defaultValue={choices.method} className="min-[560px]:w-40">
+          <option value="">{t.anyPayment}</option>
+          {PAYMENT_METHODS.map((method) => (
+            <option key={method} value={method}>
+              {m.common.payment[method]}
             </option>
           ))}
         </Select>
         <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" variant="secondary">
-            Apply filters
+            {t.applyFilters}
           </Button>
           {filtered && (
             <Link
               href={href(month, { budget: '', person: '', method: '' })}
               className="inline-flex min-h-11 items-center rounded-control px-3 font-medium text-ink hover:bg-sunken hover:underline"
             >
-              Clear filters
+              {t.clearFilters}
             </Link>
           )}
         </div>
@@ -144,33 +153,33 @@ async function Transactions({ searchParams }: Pick<PageProps<'/transactions'>, '
         {rows.length === 0 ? (
           filtered ? (
             <EmptyState
-              title={`No transactions in ${monthLabel(month)} match these filters`}
+              title={fmt(t.noneMatch, values)}
               action={
                 <ButtonLink variant="secondary" href={href(month, { budget: '', person: '', method: '' })}>
-                  Clear filters
+                  {t.clearFilters}
                 </ButtonLink>
               }
             />
           ) : (
-            <EmptyState
-              title={`No transactions in ${monthLabel(month)}`}
-              action={addButtons}
-            >
-              {isGuest ? 'Only the ones you add show here.' : undefined}
+            <EmptyState title={fmt(t.none, values)} action={addButtons}>
+              {isGuest ? t.guestOnlyOwn : undefined}
             </EmptyState>
           )
         ) : (
           <>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
               <p className="text-muted">
-                {rows.length} {rows.length === 1 ? 'transaction' : 'transactions'}, <Money sen={shownSen} className="font-semibold text-ink" /> in total
+                {fmtNodes(rows.length === 1 ? t.countOne : t.countMany, {
+                  count: rows.length,
+                  total: <Money sen={shownSen} className="font-semibold text-ink" />,
+                })}
               </p>
               {/* A plain link: the browser saves the file the route sends. */}
               <a href={href(month, choices, '/api/export')} download className="inline-flex min-h-11 items-center font-medium">
-                {(await getMessages()).export.button}
+                {m.export.button}
               </a>
             </div>
-            <TransactionList rows={rows} />
+            <TransactionList rows={rows} locale={locale} />
           </>
         )}
       </div>

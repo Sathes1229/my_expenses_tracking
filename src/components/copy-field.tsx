@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
+import { useMessages } from '@/i18n/client';
 import { Button } from './button';
 import { cx } from './cx';
 import { controlClass, controlProps, FieldShell } from './field';
@@ -24,6 +25,7 @@ export function CopyField({ label, value, hint, mono = false, autoFocus = false 
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState('');
+  const { common } = useMessages();
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -35,7 +37,7 @@ export function CopyField({ label, value, hint, mono = false, autoFocus = false 
     if (window.isSecureContext && navigator.clipboard) {
       try {
         await navigator.clipboard.writeText(value);
-        setStatus('Copied.');
+        setStatus(common.copied);
         return;
       } catch {
         // Permission refused: try the fallback below.
@@ -49,7 +51,7 @@ export function CopyField({ label, value, hint, mono = false, autoFocus = false 
     } catch {
       copied = false;
     }
-    setStatus(copied ? 'Copied.' : 'Could not copy here. The text is selected: copy it with your keyboard or a long press.');
+    setStatus(copied ? common.copied : common.copyFailed);
   }
 
   return (
@@ -64,7 +66,7 @@ export function CopyField({ label, value, hint, mono = false, autoFocus = false 
           className={cx(controlClass(), 'flex-1', mono && 'font-mono tracking-wide')}
         />
         <Button variant="secondary" onClick={copy} className="shrink-0">
-          Copy
+          {common.copy}
         </Button>
       </div>
       <p aria-live="polite" className="min-h-5 text-sm text-muted">

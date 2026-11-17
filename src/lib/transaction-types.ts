@@ -18,11 +18,5 @@ export type TransactionInput = {
   receiptUploadId?: string;
 };
 
-export const PAYMENT_LABELS: Record<PaymentMethod, string> = {
-  qr: 'QR',
-  cash: 'Cash',
-  card: 'Card',
-  other: 'Other',
-};
-
+// The budgetName rows get when they have no budget. Screens show common.uncategorised from the catalog instead.
 export const UNCATEGORISED = 'Uncategorised';
