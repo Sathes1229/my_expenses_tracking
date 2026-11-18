@@ -126,9 +126,10 @@ Private: **Settings > Network & internet > Wi-Fi**, choose your network, and und
 
 ### Put it on a phone's home screen
 
-On an iPhone connected to your home Wi-Fi:
+On an iPhone:
 
-1. Open **Safari** and go to the app's address, for example `http://192.168.1.10:3100`.
+1. Open **Safari** and go to the app's address: the server's `https://` address, or this PC's
+   address on your Wi-Fi, for example `http://192.168.1.10:3100`.
 2. Tap **Share** (the square with an arrow), then **Add to Home Screen**.
 3. If you see **Open as Web App**, leave it on. Tap **Add**.
 
@@ -140,9 +141,39 @@ On Android, open the address in **Chrome**, tap the **⋮** menu and choose **Ad
 
 Someone you invite opens their invite link first and sets a password, then adds the icon.
 
-The icon works only on your home Wi-Fi, while the app runs on this PC. It remembers the address it
+When the app runs on this PC, the icon works only on your home Wi-Fi. It remembers the address it
 was added from: if the PC's IP address changes, delete the icon and add it again from the new
-address. Reserving a fixed address for this PC in your router avoids that.
+address. Reserving a fixed address for this PC in your router avoids that. On a server with its own
+domain (see [Moving to a server](#moving-to-a-server)) the icon works on any network.
+
+## Using it
+
+### Language
+
+The app speaks Bahasa Melayu and English. The first time, it follows the language of the phone or
+browser. Each person can change it in **Profile > Language**; the choice is saved on their account
+and used on every device they sign in on. Budget names, shop names and notes stay as people typed
+them. The assistant answers in the language of the question.
+
+### Starting with common budgets
+
+When a household has no budgets yet, the owner's **Budgets** page offers common ones (groceries,
+petrol, eating out, bills and more). Tick the ones you want, give each a monthly amount and create
+them together. They are ordinary budgets: rename, change or archive them like any other. **Add a
+budget** is there too, for one of your own.
+
+### Reports
+
+**Reports** (owner and members) shows a month against the one before: the total spent and how much
+more or less that is, each budget as two bars, and both months day by day, with a line comparing
+them up to the same day. **Previous month** goes back. Guests do not see Reports, since it shows
+household figures.
+
+### Export to Excel
+
+On **Transactions**, **Export to Excel** downloads the month and filters you are looking at as an
+`.xlsx` file: a sheet of transactions with a total row, and a sheet of their items. Headings follow
+your language. A guest's file holds only their own transactions.
 
 ## Turn on the AI features
 
