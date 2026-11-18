@@ -55,6 +55,7 @@ export const en = {
     archived: '{name} (archived)',
     rowMore: '{amount} more',
     rowLess: '{amount} less',
+    lastMonthAmount: '{month}: {amount}',
     rowSame: 'No change',
     dayByDay: 'Spending so far, day by day',
     sameDay: 'By {thisDay} the household spent {thisAmount}. By {lastDay} it had spent {lastAmount}.',

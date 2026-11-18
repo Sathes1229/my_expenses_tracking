@@ -26,7 +26,18 @@ export function Legend({ labels }: { labels: Labels }) {
  * Each budget with two bars on one scale, this month over last month. Every amount is written out,
  * so the bars are only a picture of numbers already on screen and are hidden from screen readers.
  */
-export function PairedBars({ rows, t, nameOf }: { rows: ReportRow[]; t: Messages['reports']; nameOf: (row: ReportRow) => string }) {
+export function PairedBars({
+  rows,
+  t,
+  nameOf,
+  lastLabel,
+}: {
+  rows: ReportRow[];
+  t: Messages['reports'];
+  nameOf: (row: ReportRow) => string;
+  /** Last month's name, for the amount written under each row. */
+  lastLabel: string;
+}) {
   const largest = Math.max(1, ...rows.flatMap((row) => [row.thisSen, row.lastSen]));
   return (
     <ul className="mt-3 flex flex-col gap-4">
@@ -45,6 +56,7 @@ export function PairedBars({ rows, t, nameOf }: { rows: ReportRow[]; t: Messages
                 <span className={diff > 0 ? 'ml-2 text-sm text-danger' : 'ml-2 text-sm text-muted'}>{change}</span>
               </span>
             </div>
+            <p className="text-sm text-muted">{fmt(t.lastMonthAmount, { month: lastLabel, amount: formatRM(row.lastSen) })}</p>
             <span aria-hidden="true" className="mt-1.5 flex flex-col gap-1">
               <span className="block h-2.5">
                 <span className="block h-full min-w-0.5 bg-meter-fill" style={{ width: `${(row.thisSen / largest) * 100}%` }} />

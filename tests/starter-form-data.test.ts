@@ -52,22 +52,31 @@ describe('parseStarterForm', () => {
   });
 
   it('asks to tick at least one row', () => {
-    const result = parseStarterForm(form([['amount_groceries', '600']]), 'ms');
+    const result = parseStarterForm(form([['name_groceries', 'Barang dapur'], ['amount_groceries', '']]), 'ms');
     expect(result).toEqual({ ok: false, errors: { pick: messages.ms.errors.starterNoneChosen } });
   });
 
-  it('ignores rows that are not ticked, and keys it does not know', () => {
+  it('creates a row with an amount typed even when its box was not ticked, and ignores keys it does not know', () => {
     const result = parseStarterForm(
       form([
         ['pick', 'groceries'],
         ['name_groceries', 'Groceries'],
         ['amount_groceries', '600'],
+        ['name_petrol', 'Petrol'],
         ['amount_petrol', '300'],
+        ['name_health', 'Health'],
+        ['amount_health', '  '],
         ['pick', 'yacht'],
         ['amount_yacht', '9999'],
       ]),
       'en',
     );
-    expect(result).toEqual({ ok: true, picks: [{ name: 'Groceries', allocationSen: 60000 }] });
+    expect(result).toEqual({
+      ok: true,
+      picks: [
+        { name: 'Groceries', allocationSen: 60000 },
+        { name: 'Petrol', allocationSen: 30000 },
+      ],
+    });
   });
 });

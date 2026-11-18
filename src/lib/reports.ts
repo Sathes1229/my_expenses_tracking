@@ -84,7 +84,17 @@ export async function getMonthReport(viewer: Viewer, month: string, now: Date = 
   const lastLength = daysIn(previous);
   const isCurrent = month === monthKey(now);
   const today = Number(dayKey(now).slice(8));
-  const thisLine = cumulative(byDay(thisRows), Math.max(thisLength, lastLength), isCurrent ? today : thisLength);
+  // A later month (open on the last day of this one, since entries may be dated a day ahead) has
+  // only the days up to tomorrow so far.
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const lastDayThis = isCurrent
+    ? today
+    : month > monthKey(now)
+      ? month === monthKey(tomorrow)
+        ? Number(dayKey(tomorrow).slice(8))
+        : 0
+      : thisLength;
+  const thisLine = cumulative(byDay(thisRows), Math.max(thisLength, lastLength), lastDayThis);
   const lastLine = cumulative(byDay(lastRows), Math.max(thisLength, lastLength), lastLength);
   const daily = thisLine.map((thisSen, i) => ({ day: i + 1, thisSen, lastSen: lastLine[i] }));
 

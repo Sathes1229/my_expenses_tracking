@@ -109,6 +109,16 @@ describe('getMonthReport', () => {
     expect(report.previousTotalSen).toBe(0);
   });
 
+  it('stops a later month at the latest day an entry can be in', async () => {
+    // 30 November, 8 pm in Malaysia: entries may already be dated 1 December.
+    vi.setSystemTime(new Date('2026-11-30T12:00:00Z'));
+    await spend(member, 'Early', 900, groceries, '2026-12-01', '09:00');
+    const { daily, sameDay } = await getMonthReport(member, '2026-12');
+    expect(daily[0]).toEqual({ day: 1, thisSen: 900, lastSen: 0 });
+    expect(daily[1].thisSen).toBeNull();
+    expect(sameDay).toBeNull();
+  });
+
   it('refuses a guest', async () => {
     await expect(getMonthReport(guest, '2026-11')).rejects.toThrow(ForbiddenError);
   });

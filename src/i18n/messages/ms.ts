@@ -56,6 +56,7 @@ export const ms: Messages = {
     archived: '{name} (diarkibkan)',
     rowMore: '{amount} lebih',
     rowLess: '{amount} kurang',
+    lastMonthAmount: '{month}: {amount}',
     rowSame: 'Tiada perubahan',
     dayByDay: 'Perbelanjaan setakat ini, hari demi hari',
     sameDay: 'Setakat {thisDay}, isi rumah membelanjakan {thisAmount}. Setakat {lastDay}, ia telah membelanjakan {lastAmount}.',

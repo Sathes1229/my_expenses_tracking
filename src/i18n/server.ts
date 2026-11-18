@@ -3,12 +3,13 @@ import { cache } from 'react';
 import { getSessionState } from '@/lib/auth/viewer';
 import { LOCALE_COOKIE, resolveLocale, type Locale } from './locale';
 import { messages, type Messages } from './messages';
+import { savedLocaleOf } from './saved-locale';
 
 /** The request's language: the person's saved choice, then the cookie, then the browser. */
 export const getLocale = cache(async (): Promise<Locale> => {
-  const [state, cookieStore, headerList] = await Promise.all([getSessionState(), cookies(), headers()]);
+  const [saved, cookieStore, headerList] = await Promise.all([savedLocaleOf(getSessionState), cookies(), headers()]);
   return resolveLocale({
-    saved: state?.locale ?? null,
+    saved,
     cookie: cookieStore.get(LOCALE_COOKIE)?.value,
     acceptLanguage: headerList.get('accept-language'),
   });

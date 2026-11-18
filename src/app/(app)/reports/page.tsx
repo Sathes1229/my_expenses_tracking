@@ -97,7 +97,7 @@ async function Report({ searchParams }: Pick<PageProps<'/reports'>, 'searchParam
               {t.byBudget}
             </h2>
             <Legend labels={{ thisMonth: thisLabel, lastMonth: lastLabel }} />
-            <PairedBars rows={report.byBudget} t={t} nameOf={nameOf} />
+            <PairedBars rows={report.byBudget} t={t} nameOf={nameOf} lastLabel={lastLabel} />
           </section>
 
           <section aria-labelledby="daily-heading" className="mt-6 rounded-surface border border-line bg-surface px-4 py-4">
